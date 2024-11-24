@@ -9,10 +9,11 @@
 	} from '$lib/rtc-client';
 
 	let roomCode = $state('');
-	let netClient: NetworkClient | null = null;
+	let netClient: NetworkClient | null = $state(null);
 	let isHost = $state(false);
 	let joining = $state(false);
-    let interval: number | null = null;
+	let interval: number | null = null;
+	let yourName = $state('');
 
 	const DATA_CHANNELS = [{ label: 'chat' }];
 </script>
@@ -27,12 +28,12 @@
 			if (isHost) {
 				roomCode = createRoomCode();
 				netClient = NetworkClient.createRoom(
-					'HOST',
+					yourName,
 					DATA_CHANNELS,
 					defaultUploadAnswer('chat', roomCode),
-                    defaultAdvertise('chat', roomCode)
+					defaultAdvertise('chat', roomCode)
 				);
-                interval = defaultAcceptOffers('chat', roomCode, netClient);
+				interval = defaultAcceptOffers('chat', roomCode, netClient);
 			} else {
 				if (netClient) {
 					netClient.close();
@@ -53,6 +54,13 @@
 		{/if}
 	</span>
 </label>
+<input
+	class="m-8"
+	type="text"
+	bind:value={yourName}
+	placeholder="Your Name"
+	disabled={netClient !== null}
+/>
 {#if isHost}
 	<h1>Room Code: <code>{roomCode}</code></h1>
 {:else}
@@ -61,8 +69,10 @@
 		onsubmit={async (event) => {
 			event.preventDefault();
 			joining = true;
-			netClient = await defaultConnectToRoom('chat', roomCode, 'JOINER', DATA_CHANNELS, () => {
+			netClient = await defaultConnectToRoom('chat', roomCode, yourName, DATA_CHANNELS, () => {
 				joining = false;
+				roomCode = '';
+				netClient = null;
 			});
 			console.log(netClient);
 			joining = false;

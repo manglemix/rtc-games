@@ -2,9 +2,11 @@ import type { RequestHandler } from './$types';
 import { createClient } from 'redis';
 import { RTC_KV_PORT, RTC_KV_TOKEN, RTC_KV_URL } from '$env/static/private';
 
+export type SdpAnswer = { sdp: RTCSessionDescriptionInit; ices: RTCIceCandidate[] };
+
 export const POST: RequestHandler = async ({ params, request }) => {
 	const { game, roomCode } = params;
-	const answer: { peerName: string; answer: RTCSessionDescriptionInit } = await request.json();
+	const answer: { peerName: string; answer: SdpAnswer } = await request.json();
 	const rtc_kv = createClient({
 		password: RTC_KV_TOKEN,
 		socket: {
@@ -30,7 +32,7 @@ export const DELETE: RequestHandler = async ({ params }) => {
 	});
 	await rtc_kv.connect();
 
-	const answers: { peerName: string; answer: RTCSessionDescriptionInit }[] = [];
+	const answers: { peerName: string; answer: SdpAnswer }[] = [];
 	while (true) {
 		const answerStr: string | null = await rtc_kv.rPop(`answers:${game}:${roomCode}`);
 		if (answerStr === null) {

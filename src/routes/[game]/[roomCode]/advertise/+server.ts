@@ -16,7 +16,6 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	await rtc_kv.set(`advertisements:${game}:${roomCode}`, JSON.stringify(advertisement), {
 		EX: 1800
 	});
-    console.log("Received advertisement: ", advertisement);
 
 	return new Response(null, { status: 204 });
 };
@@ -35,9 +34,11 @@ export const GET: RequestHandler = async ({ params, request }) => {
 		(await rtc_kv.get(`advertisements:${game}:${roomCode}`)) ??
 		'{ "peerNames": [], "hostName": "" }';
 	// const advertisement: { peerNames: string[], hostName: string } = await JSON.parse(advertisementStr);
-    console.log("Advertisement requested: ", advertisementStr);
 
-	return new Response(advertisementStr, { status: 200, headers: { 'Content-Type': 'application/json' } });
+	return new Response(advertisementStr, {
+		status: 200,
+		headers: { 'Content-Type': 'application/json' }
+	});
 };
 
 export const DELETE: RequestHandler = async ({ params }) => {
@@ -51,6 +52,6 @@ export const DELETE: RequestHandler = async ({ params }) => {
 	});
 	await rtc_kv.connect();
 	await rtc_kv.del(`advertisements:${game}:${roomCode}`);
-    console.log("Advertisement deleted");
+	('Advertisement deleted');
 	return new Response(null, { status: 204 });
 };

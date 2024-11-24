@@ -6,7 +6,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	const { game, roomCode } = params;
 	// const offers: { newPeerName: string, offers: Record<string, { sdp: RTCSessionDescriptionInit; ices: RTCIceCandidate[] }>} =
 	// 	await request.json();
-    const offersStr = await request.text();
+	const offersStr = await request.text();
 	const rtc_kv = createClient({
 		password: RTC_KV_TOKEN,
 		socket: {
@@ -15,7 +15,6 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 	});
 	await rtc_kv.connect();
-    console.log("Received offers: ", offersStr);
 	while (true) {
 		// Only send our offers if the key doesn't exist
 		const oldValue: string =
@@ -30,7 +29,6 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		// sleep for 2 seconds
 		await new Promise((resolve) => setTimeout(resolve, 2000));
 	}
-    console.log("Wrote offers: ", offersStr);
 
 	return new Response(null, { status: 204 });
 };
@@ -45,8 +43,8 @@ export const DELETE: RequestHandler = async ({ params }) => {
 		}
 	});
 	await rtc_kv.connect();
-	const offersStr: string = (await rtc_kv.getDel(`offers:${game}:${roomCode}`)) ?? '{ "newPeerName": "", "offers": {} }';
-    console.log("Read offers: ", offersStr);
+	const offersStr: string =
+		(await rtc_kv.getDel(`offers:${game}:${roomCode}`)) ?? '{ "newPeerName": "", "offers": {} }';
 	// const offers: Record<string, { sdp: RTCSessionDescriptionInit, ices: RTCIceCandidate[] }> = JSON.parse(offersStr);
 	return new Response(offersStr, { status: 200, headers: { 'Content-Type': 'application/json' } });
 };
