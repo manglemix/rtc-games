@@ -227,6 +227,20 @@ class NetworkPeer {
 		}
 		await this.rtc.addIceCandidate();
 	}
+
+	send(channel: string, data: string | ArrayBuffer | Blob) {
+		if (data instanceof Blob) {
+			this.dataChannels.get(channel)!.send(data);
+		} else if (data instanceof ArrayBuffer) {
+			this.dataChannels.get(channel)!.send(data);
+		} else {
+			this.dataChannels.get(channel)!.send(data);
+		}
+	}
+
+	setOnMessage(channel: string, f: (data: MessageEvent) => void) {
+		this.dataChannels.get(channel)!.onmessage = f;
+	}
 }
 
 export type DataChannelInit = {
@@ -246,13 +260,14 @@ export type ConnectToRoomInit = {
 };
 
 export class NetworkClient {
-	name: string;
-	isHost: boolean;
-	peers: Map<string, NetworkPeer> = new Map();
-	dataChannels: DataChannelInit[];
-	uploadAnswer: (newPeerName: string, answer: SdpAnswer) => void;
-	advertise: (advertisement: { peerNames: string[]; hostName: string }) => void = () => {};
+	private name: string;
+	private isHost: boolean;
+	private peers: Map<string, NetworkPeer> = new Map();
+	private dataChannels: DataChannelInit[];
+	private uploadAnswer: (newPeerName: string, answer: SdpAnswer) => void;
+	private advertise: (advertisement: { peerNames: string[]; hostName: string }) => void = () => {};
 	public onGuestDisconnect: (peerName: string) => void = () => {};
+	private onMessage: { channel: string, f: (from: string, data: MessageEvent) => void }[] = []
 
 	private constructor(
 		name: string,
@@ -317,6 +332,35 @@ export class NetworkClient {
 		return client;
 	}
 
+	public send(channel: string, data: string | ArrayBuffer | Blob, to: string[] = []) {
+		if (to.length > 0) {
+			for (const name of to) {
+				this.peers.get(name)!.send(channel, data);
+			}
+		} else {
+			for (const peer of this.peers.values()) {
+				peer.send(channel, data);
+			}
+		}
+	}
+
+	public setOnMessage(
+		channel: string,
+		f: (from: string, data: MessageEvent) => void,
+		from: string[] = []
+	) {
+		this.onMessage.push({ channel, f });
+		if (from.length > 0) {
+			for (const name of from) {
+				this.peers.get(name)!.setOnMessage(channel, (data) => f(name, data));
+			}
+		} else {
+			for (const [name, peer] of this.peers) {
+				peer.setOnMessage(channel, (data) => f(name, data));
+			}
+		}
+	}
+
 	public close() {
 		for (const peer of this.peers.values()) {
 			peer.close();
@@ -372,18 +416,24 @@ export class NetworkClient {
 			}
 		}
 		this.peers.set(newPeerName, peerToAdd!);
+		for (const { channel, f } of this.onMessage) {
+			peerToAdd!.setOnMessage(channel, (data) => f(newPeerName, data));
+		}
 		this.advertise(this.advertiseAsHost());
 
 		return true;
 	}
 
-	private async acceptSdpOfferAsGuest(peerName: string, offer: SdpOffer) {
+	private async acceptSdpOfferAsGuest(newPeerName: string, offer: SdpOffer) {
 		if (this.isHost) {
 			console.error('Attempted to accept single SDP offer as host');
 			return;
 		}
 		const { peer, answer } = await NetworkPeer.acceptOfferAsGuest(offer, this.dataChannels);
-		this.peers.set(peerName, peer);
+		this.peers.set(newPeerName, peer);
+		for (const { channel, f } of this.onMessage) {
+			peer!.setOnMessage(channel, (data) => f(newPeerName, data));
+		}
 		this.uploadAnswer(this.name, answer);
 	}
 

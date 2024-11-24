@@ -14,6 +14,18 @@
 	let joining = $state(false);
 	let interval: number | null = null;
 	let yourName = $state('');
+	let message = $state('');
+	let messages: { from: string; message: string }[] = $state([]);
+
+    $effect(() => {
+        if (netClient) {
+            netClient.setOnMessage('chat', (from, message) => {
+                messages.push({ from, message: message.data });
+            });
+        } else {
+            messages = [];
+        }
+    });
 
 	const DATA_CHANNELS = [{ label: 'chat' }];
 </script>
@@ -63,7 +75,7 @@
 />
 {#if isHost}
 	<h1>Room Code: <code>{roomCode}</code></h1>
-{:else}
+{:else if netClient === null}
 	<form
 		class="m-8 flex w-min flex-col"
 		onsubmit={async (event) => {
@@ -74,7 +86,6 @@
 				roomCode = '';
 				netClient = null;
 			});
-			console.log(netClient);
 			joining = false;
 		}}
 	>
@@ -84,4 +95,33 @@
 			>{#if joining}Joining...{:else}Join{/if}</button
 		>
 	</form>
+{/if}
+
+{#if isHost || netClient !== null}
+<section class="flex flex-col gap-4">
+    {#each messages as { from, message }}
+        <div class="flex gap-2">
+            <span class="font-bold">{from}:</span>
+            <span>{message}</span>
+        </div>
+    {/each}
+    <form
+        class="flex gap-2"
+        onsubmit={async (event) => {
+            event.preventDefault();
+            if (netClient) {
+                netClient.send('chat', message);
+                messages.push({ from: yourName, message });
+                message = '';
+            }
+        }}
+    >
+        <input
+            class="flex-1"
+            bind:value={message}
+            placeholder="Type a message..."
+        />
+        <button>Send</button>
+    </form>
+</section>
 {/if}
