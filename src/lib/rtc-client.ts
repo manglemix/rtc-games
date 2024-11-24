@@ -158,6 +158,10 @@ class NetworkPeer {
     
         return await finished;
     }
+
+    async acceptAnswer(answer: RTCSessionDescriptionInit) {
+        await this.rtc.setRemoteDescription(answer);
+    }
 }
 
 export type DataChannelInit = {
@@ -206,8 +210,19 @@ export class NetworkClient {
         );
         offers.set(init.advertisement.hostName, offer);
         client.peers.set(init.advertisement.hostName, peer);
+        const pendingAnswers = new Set(init.advertisement.peerNames);
         return {
-            client,
+            challenge: (answers: { peerName: string, answer: RTCSessionDescriptionInit }[]) => {
+                for (const { peerName, answer} of answers) {
+                    if (pendingAnswers.delete(peerName)) {
+                        client.acceptSdpAnswerAsGuest(peerName, answer);
+                    }
+                }
+                if (pendingAnswers.size === 0) {
+                    return client;
+                }
+                return null;
+            },
             offers
         };
     }
@@ -287,5 +302,77 @@ export class NetworkClient {
         });
         this.peers.set(peerName, peer);
         this.uploadAnswer(peerName, answer);
+    }
+
+    private async acceptSdpAnswerAsGuest(peerName: string, answer: RTCSessionDescriptionInit) {
+        if (this.isHost) {
+            console.error("Attempted to accept single SDP answer as host");
+            return;
+        }
+        this.peers.get(peerName)!.acceptAnswer(answer);
+    }
+}
+
+export function createRoomCode() {
+    return Math.random().toString(36).substring(2, 8);
+}
+
+export function defaultUploadAnswer(gameName: string, roomCode: string) {
+    return (peerName: string, answer: RTCSessionDescriptionInit) => {
+        fetch(`/${gameName}/${roomCode}/answers/${peerName}`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ peerName, answer })
+        });
+    };
+}
+
+export async function defaultConnectToRoom(gameName: string, roomCode: string, ourName: string, dataChannels: DataChannelInit[], onHostPrematureClose: () => void) {
+    while (true) {
+        let resp = await fetch(`/${gameName}/${roomCode}/advertise/`);
+        const advertisement: { peerNames: string[], hostName: string } = await resp.json();
+        if (advertisement.hostName === "") {
+            return null;
+        }
+
+        const { challenge, offers } = await NetworkClient.connectToRoom({
+            ourName,
+            advertisement,
+            dataChannels,
+            onHostPrematureClose,
+            uploadAnswer: defaultUploadAnswer(gameName, roomCode)
+        });
+        let offerCount = offers.size;
+        resp = await fetch(`/${gameName}/${roomCode}/offers/`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(offers)
+        });
+        if (!resp.ok || resp.status !== 204) {
+            continue;
+        }
+        let client: NetworkClient | null = null;
+        while (offerCount > 0) {
+            resp = await fetch(`/${gameName}/${roomCode}/answers/${ourName}/`, {
+                method: "DELETE",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(offers)
+            });
+            if (!resp.ok || resp.status !== 200) {
+                continue;
+            }
+            const answers: { peerName: string, answer: RTCSessionDescriptionInit }[] = await resp.json();
+            offerCount -= answers.length;
+            // ?? Protects against the bug where the client is ready before all offers are accepted,
+            // as subsequent calls may overwrite with null. This scenario should not happen in practice.
+            client = challenge(answers) ?? client;
+        }
+        return client;
     }
 }
