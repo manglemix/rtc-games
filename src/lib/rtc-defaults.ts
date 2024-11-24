@@ -1,5 +1,4 @@
-import { NetworkClient, type DataChannelInit, type SdpAnswer } from "./rtc-client";
-
+import { NetworkClient, type DataChannelInit, type SdpAnswer } from './rtc-client';
 
 export function defaultUploadAnswer(gameName: string, roomCode: string) {
 	return (peerName: string, answer: SdpAnswer) => {
@@ -29,7 +28,7 @@ export async function defaultConnectToRoom(
 	gameName: string,
 	roomCode: string,
 	ourName: string,
-	dataChannels: DataChannelInit[],
+	dataChannels: DataChannelInit[]
 ) {
 	while (true) {
 		let resp = await fetch(`/${gameName}/${roomCode}/advertise/`);
@@ -99,13 +98,13 @@ export function defaultAcceptOffers(gameName: string, roomCode: string, client: 
 		}
 		const accepted = await client.acceptSdpOffersAsHost(newPeerName, offers);
 		if (accepted) {
-            const oldOnConnection = client.onConnection;
+			const oldOnConnection = client.onConnection;
 			skip = true;
 			await new Promise<void>((resolve) => {
 				client.onConnection = (peerName) => {
-                    oldOnConnection(peerName);
-                    resolve();
-                };
+					oldOnConnection(peerName);
+					resolve();
+				};
 			});
 			client.onConnection = oldOnConnection;
 			advertise(client.advertiseAsHost());

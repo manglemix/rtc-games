@@ -1,4 +1,4 @@
-import { on } from "svelte/events";
+import { on } from 'svelte/events';
 
 export type SdpOffer = { sdp: RTCSessionDescriptionInit; ices: RTCIceCandidate[] };
 export type SdpAnswer = { sdp: RTCSessionDescriptionInit; ices: RTCIceCandidate[] };
@@ -99,10 +99,7 @@ class NetworkPeer {
 	 * @param onGuestPrematureClose
 	 * @returns
 	 */
-	static async acceptOfferAsHost(
-		offer: SdpOffer,
-		dataChannels: DataChannelInit[],
-	) {
+	static async acceptOfferAsHost(offer: SdpOffer, dataChannels: DataChannelInit[]) {
 		const peer = new NetworkPeer();
 		peer.rtcConnChannel = peer.rtc.createDataChannel('rtc-conn', {
 			negotiated: true,
@@ -213,7 +210,7 @@ class NetworkPeer {
 				this.calledDisconnected = true;
 				this.onDisconnect();
 			}
-		}
+		};
 		dataChannel.onopen = () => {
 			if (!this.calledConnected) {
 				this.calledConnected = true;
@@ -300,7 +297,7 @@ export class NetworkClient {
 	public readonly name: string;
 	public readonly isHost: boolean;
 	public readonly hostName: string;
-	
+
 	public onHostDisconnect: (peerName: string) => void = () => {};
 	public onGuestDisconnect: (peerName: string) => void = () => {};
 	public onConnection: (peerName: string) => void = () => {};
@@ -308,7 +305,11 @@ export class NetworkClient {
 	private peers: Map<string, NetworkPeer> = new Map();
 	private dataChannels: DataChannelInit[];
 	private uploadAnswer: (newPeerName: string, answer: SdpAnswer) => void;
-	private onMessage: { channel: string; f: (from: string, data: MessageEvent) => void, from: Set<string> }[] = [];
+	private onMessage: {
+		channel: string;
+		f: (from: string, data: MessageEvent) => void;
+		from: Set<string>;
+	}[] = [];
 
 	private constructor(
 		name: string,
@@ -325,7 +326,13 @@ export class NetworkClient {
 	}
 
 	public static async connectToRoom(init: ConnectToRoomInit) {
-		const client = new NetworkClient(init.ourName, false, init.dataChannels, init.uploadAnswer, init.advertisement.hostName);
+		const client = new NetworkClient(
+			init.ourName,
+			false,
+			init.dataChannels,
+			init.uploadAnswer,
+			init.advertisement.hostName
+		);
 		const offers: Record<string, SdpOffer> = {};
 		for (const peerName of init.advertisement.peerNames) {
 			const { peer, offer } = await NetworkPeer.createGuest(init.dataChannels);
@@ -338,7 +345,7 @@ export class NetworkClient {
 		}
 		const { peer, offer } = await NetworkPeer.createHost(
 			(newPeerName, offer) => client.acceptSdpOfferAsGuest(newPeerName, offer),
-			init.dataChannels,
+			init.dataChannels
 		);
 		peer.onDisconnect = () => {
 			client.peers.delete(init.advertisement.hostName);
@@ -367,7 +374,7 @@ export class NetworkClient {
 	public static createRoom(
 		ourName: string,
 		dataChannels: DataChannelInit[],
-		uploadAnswer: (newPeerName: string, answer: SdpAnswer) => void,
+		uploadAnswer: (newPeerName: string, answer: SdpAnswer) => void
 	) {
 		const client = new NetworkClient(ourName, true, dataChannels, uploadAnswer, ourName);
 		return client;
@@ -398,7 +405,7 @@ export class NetworkClient {
 				ignore.add(label);
 			}
 		}
-		
+
 		if (from.length > 0) {
 			for (const name of from) {
 				if (name !== this.hostName && ignore.has(channel)) {
@@ -464,10 +471,7 @@ export class NetworkClient {
 
 		for (const [peerName, offer] of Object.entries(offers)) {
 			if (peerName === this.name) {
-				const { peer, answer } = await NetworkPeer.acceptOfferAsHost(
-					offer,
-					this.dataChannels,
-				);
+				const { peer, answer } = await NetworkPeer.acceptOfferAsHost(offer, this.dataChannels);
 				peerToAdd = peer;
 				this.uploadAnswer(peerName, answer);
 			} else {
