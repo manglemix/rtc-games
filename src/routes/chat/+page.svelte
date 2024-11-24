@@ -17,15 +17,15 @@
 	let message = $state('');
 	let messages: { from: string; message: string }[] = $state([]);
 
-    $effect(() => {
-        if (netClient) {
-            netClient.setOnMessage('chat', (from, message) => {
-                messages.push({ from, message: message.data });
-            });
-        } else {
-            messages = [];
-        }
-    });
+	$effect(() => {
+		if (netClient) {
+			netClient.setOnMessage('chat', (from, message) => {
+				messages.push({ from, message: message.data });
+			});
+		} else {
+			messages = [];
+		}
+	});
 
 	const DATA_CHANNELS = [{ label: 'chat' }];
 </script>
@@ -98,30 +98,26 @@
 {/if}
 
 {#if isHost || netClient !== null}
-<section class="flex flex-col gap-4">
-    {#each messages as { from, message }}
-        <div class="flex gap-2">
-            <span class="font-bold">{from}:</span>
-            <span>{message}</span>
-        </div>
-    {/each}
-    <form
-        class="flex gap-2"
-        onsubmit={async (event) => {
-            event.preventDefault();
-            if (netClient) {
-                netClient.send('chat', message);
-                messages.push({ from: yourName, message });
-                message = '';
-            }
-        }}
-    >
-        <input
-            class="flex-1"
-            bind:value={message}
-            placeholder="Type a message..."
-        />
-        <button>Send</button>
-    </form>
-</section>
+	<section class="flex flex-col gap-4">
+		{#each messages as { from, message }}
+			<div class="flex gap-2">
+				<span class="font-bold">{from}:</span>
+				<span>{message}</span>
+			</div>
+		{/each}
+		<form
+			class="flex gap-2"
+			onsubmit={async (event) => {
+				event.preventDefault();
+				if (netClient) {
+					netClient.send('chat', message);
+					messages.push({ from: yourName, message });
+					message = '';
+				}
+			}}
+		>
+			<input class="flex-1" bind:value={message} placeholder="Type a message..." />
+			<button>Send</button>
+		</form>
+	</section>
 {/if}

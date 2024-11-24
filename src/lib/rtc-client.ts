@@ -5,7 +5,7 @@ class NetworkPeer {
 	private rtc: RTCPeerConnection = new RTCPeerConnection();
 	private rtcConnChannel: RTCDataChannel | null = null;
 	private dataChannels: Map<string, RTCDataChannel> = new Map();
-	private connectionPhase = false;
+	onDisconnect: () => void = () => {};
 
 	private constructor() {}
 
@@ -21,20 +21,20 @@ class NetworkPeer {
 	static async createHost(
 		onSdpOffer: (newPeerName: string, offer: SdpOffer) => void,
 		dataChannels: DataChannelInit[],
-		onHostPrematureClose: () => void
 	) {
 		const peer = new NetworkPeer();
-		peer.rtcConnChannel = peer.rtc.createDataChannel('rtc-conn', { negotiated: true, id: 0 });
-		peer.connectionPhase = true;
+		peer.rtcConnChannel = peer.rtc.createDataChannel('rtc-conn', {
+			negotiated: true,
+			id: 0,
+			ordered: false
+		});
 		peer.rtcConnChannel.onmessage = (event) => {
 			const obj = JSON.parse(event.data);
 			onSdpOffer(obj.newPeerName, obj.offer);
 		};
 		peer.rtcConnChannel.onclosing = () => {
-			if (peer.connectionPhase) {
-				onHostPrematureClose();
-			}
 			peer.rtcConnChannel = null;
+			peer.onDisconnect();
 		};
 		for (const [id, dataChannelInit] of dataChannels.entries()) {
 			peer.createDataChannel(dataChannelInit.label, {
@@ -61,8 +61,10 @@ class NetworkPeer {
 	 */
 	static async createGuest(dataChannels: DataChannelInit[]) {
 		const peer = new NetworkPeer();
-		peer.connectionPhase = true;
 		for (const [id, dataChannelInit] of dataChannels.entries()) {
+			if (dataChannelInit.hostOnly) {
+				continue;
+			}
 			peer.createDataChannel(dataChannelInit.label, {
 				negotiated: true,
 				id: id + 1,
@@ -89,12 +91,14 @@ class NetworkPeer {
 		onGuestPrematureClose: () => void
 	) {
 		const peer = new NetworkPeer();
-		peer.rtcConnChannel = peer.rtc.createDataChannel('rtc-conn', { negotiated: true, id: 0 });
-		peer.rtcConnChannel.onclosing = () => {
-			if (peer.connectionPhase) {
-				onGuestPrematureClose();
-			}
+		peer.rtcConnChannel = peer.rtc.createDataChannel('rtc-conn', {
+			negotiated: true,
+			id: 0,
+			ordered: false
+		});
+		peer.rtcConnChannel.onclose = () => {
 			peer.rtcConnChannel = null;
+			peer.onDisconnect();
 		};
 		for (const [id, dataChannelInit] of dataChannels.entries()) {
 			peer.createDataChannel(dataChannelInit.label, {
@@ -140,6 +144,9 @@ class NetworkPeer {
 	static async acceptOfferAsGuest(offer: SdpOffer, dataChannels: DataChannelInit[]) {
 		const peer = new NetworkPeer();
 		for (const [id, dataChannelInit] of dataChannels.entries()) {
+			if (dataChannelInit.hostOnly) {
+				continue;
+			}
 			peer.createDataChannel(dataChannelInit.label, {
 				negotiated: true,
 				id: id + 1,
@@ -177,12 +184,9 @@ class NetworkPeer {
 		this.rtc.close();
 	}
 
-	finishConnectionPhase() {
-		this.connectionPhase = false;
-	}
-
 	private createDataChannel(label: string, dataChannelInit: RTCDataChannelInit) {
 		const dataChannel = this.rtc.createDataChannel(label, dataChannelInit);
+		dataChannel.onclose = this.onDisconnect;
 		this.dataChannels.set(label, dataChannel);
 	}
 
@@ -245,6 +249,7 @@ class NetworkPeer {
 
 export type DataChannelInit = {
 	label: string;
+	hostOnly?: boolean;
 	maxPacketLifeTime?: number;
 	maxRetransmits?: number;
 	ordered?: boolean;
@@ -255,45 +260,58 @@ export type ConnectToRoomInit = {
 	ourName: string;
 	advertisement: { peerNames: string[]; hostName: string };
 	dataChannels: DataChannelInit[];
-	onHostPrematureClose: () => void;
 	uploadAnswer: (newPeerName: string, answer: SdpAnswer) => void;
 };
 
 export class NetworkClient {
-	private name: string;
-	private isHost: boolean;
+	public readonly name: string;
+	public readonly isHost: boolean;
+	public readonly hostName: string;
+	
+	public onHostDisconnect: (peerName: string) => void = () => {};
+	public onGuestDisconnect: (peerName: string) => void = () => {};
+	public onConnection: (peerName: string) => void = () => {};
+
 	private peers: Map<string, NetworkPeer> = new Map();
 	private dataChannels: DataChannelInit[];
 	private uploadAnswer: (newPeerName: string, answer: SdpAnswer) => void;
 	private advertise: (advertisement: { peerNames: string[]; hostName: string }) => void = () => {};
-	public onGuestDisconnect: (peerName: string) => void = () => {};
-	private onMessage: { channel: string, f: (from: string, data: MessageEvent) => void }[] = []
+	private onMessage: { channel: string; f: (from: string, data: MessageEvent) => void, from: Set<string> }[] = [];
 
 	private constructor(
 		name: string,
 		isHost: boolean,
 		dataChannels: DataChannelInit[],
-		uploadAnswer: (newPeerName: string, answer: SdpAnswer) => void
+		uploadAnswer: (newPeerName: string, answer: SdpAnswer) => void,
+		hostName: string
 	) {
 		this.name = name;
 		this.isHost = isHost;
 		this.dataChannels = dataChannels;
 		this.uploadAnswer = uploadAnswer;
+		this.hostName = hostName;
 	}
 
 	public static async connectToRoom(init: ConnectToRoomInit) {
-		const client = new NetworkClient(init.ourName, false, init.dataChannels, init.uploadAnswer);
+		const client = new NetworkClient(init.ourName, false, init.dataChannels, init.uploadAnswer, init.advertisement.hostName);
 		const offers: Record<string, SdpOffer> = {};
 		for (const peerName of init.advertisement.peerNames) {
 			const { peer, offer } = await NetworkPeer.createGuest(init.dataChannels);
 			offers[peerName] = offer;
 			client.peers.set(peerName, peer);
+			peer.onDisconnect = () => {
+				client.peers.delete(peerName);
+				client.onGuestDisconnect(peerName);
+			};
 		}
 		const { peer, offer } = await NetworkPeer.createHost(
 			(newPeerName, offer) => client.acceptSdpOfferAsGuest(newPeerName, offer),
 			init.dataChannels,
-			init.onHostPrematureClose
 		);
+		peer.onDisconnect = () => {
+			client.peers.delete(init.advertisement.hostName);
+			client.onHostDisconnect(init.advertisement.hostName);
+		};
 		offers[init.advertisement.hostName] = offer;
 		client.peers.set(init.advertisement.hostName, peer);
 		const pendingAnswers = new Set(init.advertisement.peerNames);
@@ -314,19 +332,13 @@ export class NetworkClient {
 		};
 	}
 
-	finishConnectionPhase() {
-		for (const peer of this.peers.values()) {
-			peer.finishConnectionPhase();
-		}
-	}
-
 	public static createRoom(
 		ourName: string,
 		dataChannels: DataChannelInit[],
 		uploadAnswer: (newPeerName: string, answer: SdpAnswer) => void,
 		advertise: (advertisement: { peerNames: string[]; hostName: string }) => void
 	) {
-		const client = new NetworkClient(ourName, true, dataChannels, uploadAnswer);
+		const client = new NetworkClient(ourName, true, dataChannels, uploadAnswer, ourName);
 		client.advertise = advertise;
 		advertise(client.advertiseAsHost());
 		return client;
@@ -349,13 +361,27 @@ export class NetworkClient {
 		f: (from: string, data: MessageEvent) => void,
 		from: string[] = []
 	) {
-		this.onMessage.push({ channel, f });
+		this.onMessage.push({ channel, f, from: new Set(from) });
+		const ignore = new Set();
+
+		for (const { label, hostOnly } of this.dataChannels) {
+			if (hostOnly) {
+				ignore.add(label);
+			}
+		}
+		
 		if (from.length > 0) {
 			for (const name of from) {
+				if (name !== this.hostName && ignore.has(channel)) {
+					continue;
+				}
 				this.peers.get(name)!.setOnMessage(channel, (data) => f(name, data));
 			}
 		} else {
 			for (const [name, peer] of this.peers) {
+				if (name !== this.hostName && ignore.has(channel)) {
+					continue;
+				}
 				peer.setOnMessage(channel, (data) => f(name, data));
 			}
 		}
@@ -378,7 +404,11 @@ export class NetworkClient {
 		};
 	}
 
-	public async acceptSdpOffers(newPeerName: string, offers: Record<string, SdpOffer>) {
+	public getPeerNames() {
+		return Array.from(this.peers.keys());
+	}
+
+	public async acceptSdpOffersAsHost(newPeerName: string, offers: Record<string, SdpOffer>) {
 		if (!this.isHost) {
 			console.error('Attempted to accept SDP offers even though not host');
 			return false;
@@ -386,6 +416,9 @@ export class NetworkClient {
 		// Check if all names are accounted for and there are no extra names
 		const peerNames = new Set(Array.from(this.peers.keys()));
 		const offerNames = new Set(Object.keys(offers));
+		if (peerNames.has(newPeerName) || newPeerName === this.name) {
+			return false;
+		}
 		if (peerNames.size + 1 !== offerNames.size) {
 			return false;
 		}
@@ -416,10 +449,19 @@ export class NetworkClient {
 			}
 		}
 		this.peers.set(newPeerName, peerToAdd!);
-		for (const { channel, f } of this.onMessage) {
-			peerToAdd!.setOnMessage(channel, (data) => f(newPeerName, data));
+
+		for (const { channel, f, from } of this.onMessage) {
+			if (from.size === 0 || from.has(newPeerName)) {
+				peerToAdd!.setOnMessage(channel, (data) => f(newPeerName, data));
+			}
 		}
 		this.advertise(this.advertiseAsHost());
+		this.onConnection(newPeerName);
+		peerToAdd!.onDisconnect = () => {
+			this.peers.delete(newPeerName);
+			this.onGuestDisconnect(newPeerName);
+			this.advertise(this.advertiseAsHost());
+		};
 
 		return true;
 	}
@@ -431,10 +473,27 @@ export class NetworkClient {
 		}
 		const { peer, answer } = await NetworkPeer.acceptOfferAsGuest(offer, this.dataChannels);
 		this.peers.set(newPeerName, peer);
-		for (const { channel, f } of this.onMessage) {
-			peer!.setOnMessage(channel, (data) => f(newPeerName, data));
+		const ignore = new Set();
+
+		for (const { label, hostOnly } of this.dataChannels) {
+			if (hostOnly) {
+				ignore.add(label);
+			}
+		}
+		for (const { channel, f, from } of this.onMessage) {
+			if (ignore.has(channel)) {
+				continue;
+			}
+			if (from.size === 0 || from.has(newPeerName)) {
+				peer!.setOnMessage(channel, (data) => f(newPeerName, data));
+			}
 		}
 		this.uploadAnswer(this.name, answer);
+		this.onConnection(newPeerName);
+		peer.onDisconnect = () => {
+			this.peers.delete(newPeerName);
+			this.onGuestDisconnect(newPeerName);
+		};
 	}
 
 	private async acceptSdpAnswerAsGuest(peerName: string, answer: SdpAnswer) {
@@ -479,12 +538,16 @@ export async function defaultConnectToRoom(
 	roomCode: string,
 	ourName: string,
 	dataChannels: DataChannelInit[],
-	onHostPrematureClose: () => void
 ) {
 	while (true) {
 		let resp = await fetch(`/${gameName}/${roomCode}/advertise/`);
+
+		if (!resp.ok || resp.status !== 200) {
+			return null;
+		}
+
 		const advertisement: { peerNames: string[]; hostName: string } = await resp.json();
-		if (advertisement.hostName === '') {
+		if (advertisement.hostName === '' || advertisement.hostName === ourName) {
 			return null;
 		}
 
@@ -492,7 +555,6 @@ export async function defaultConnectToRoom(
 			ourName,
 			advertisement,
 			dataChannels,
-			onHostPrematureClose,
 			uploadAnswer: defaultUploadAnswer(gameName, roomCode)
 		});
 		let offerCount = Object.keys(offers).length;
@@ -537,6 +599,6 @@ export function defaultAcceptOffers(gameName: string, roomCode: string, client: 
 		if (newPeerName === '') {
 			return;
 		}
-		await client.acceptSdpOffers(newPeerName, offers);
+		await client.acceptSdpOffersAsHost(newPeerName, offers);
 	}, 2000);
 }
