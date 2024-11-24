@@ -1,7 +1,8 @@
 <script lang=ts>
 	import { DATA_CHANNELS } from "$lib/hantu/game-state";
 	import Game from "$lib/hantu/Game.svelte";
-	import { createRoomCode, defaultAcceptOffers, defaultAdvertise, defaultConnectToRoom, defaultUploadAnswer, NetworkClient } from "$lib/rtc-client";
+	import { createRoomCode, NetworkClient } from "$lib/rtc-client";
+    import { defaultAcceptOffers, defaultAdvertise, defaultConnectToRoom, defaultUploadAnswer } from "$lib/rtc-defaults";
 	import { SvelteSet } from "svelte/reactivity";
     let netClient: NetworkClient | null = $state(null);
     let onMainMenu = $state(true);
@@ -50,10 +51,18 @@
                 <button onclick={() => {
                     clearInterval(acceptInterval);
                     onMainMenu = false;
+                    netClient!.onConnection = (newPeerName) => {
+                        console.error("Unexpected connection from", newPeerName);
+                    };
+                    netClient!.onGuestDisconnect = (peerName) => {
+                        peerNames.delete(peerName);
+                    };
                     netClient!.send("game-state", "StartGame");
                 }}>Start Game</button>
                 <button onclick={() => {
                     roomCode = "";
+                    netClient!.onGuestDisconnect = () => {};
+                    netClient!.close();
                     netClient = null;
                     clearInterval(acceptInterval);
                 }}>Close Room</button>
@@ -67,14 +76,17 @@
                     netClient = NetworkClient.createRoom(
                         name,
                         DATA_CHANNELS,
-                        defaultUploadAnswer("hantu", roomCode),
-                        defaultAdvertise("hantu", roomCode)
+                        defaultUploadAnswer("hantu", roomCode)
                     );
+                    const advertise = defaultAdvertise("hantu", roomCode);
+                    advertise(netClient.advertiseAsHost());
                     netClient.onConnection = (newPeerName) => {
                         peerNames.add(newPeerName);
+                        advertise(netClient!.advertiseAsHost());
                     }
                     netClient.onGuestDisconnect = (peerName) => {
                         peerNames.delete(peerName);
+                        advertise(netClient!.advertiseAsHost());
                     }
 				    acceptInterval = defaultAcceptOffers('hantu', roomCode, netClient);
 
@@ -119,6 +131,10 @@
                 }
                 netClient.onGuestDisconnect = (peerName) => {
                     peerNames.delete(peerName);
+                }
+                netClient.onHostDisconnect = () => {
+                    netClient!.close();
+                    netClient = null;
                 }
                 netClient.setOnMessage("game-state", (message) => {
                     if (message === "StartGame") {

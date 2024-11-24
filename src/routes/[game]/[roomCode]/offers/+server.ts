@@ -15,22 +15,34 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 	});
 	await rtc_kv.connect();
-	while (true) {
-		// Only send our offers if the key doesn't exist
-		const oldValue: string =
-			(await rtc_kv.set(`offers:${game}:${roomCode}`, offersStr, {
-				GET: true,
-				NX: true,
-				EX: 10
-			})) ?? '';
-		if (oldValue === '') {
-			break;
-		}
-		// sleep for 2 seconds
-		await new Promise((resolve) => setTimeout(resolve, 2000));
+	// Only send our offers if the key doesn't exist
+	const oldValue: string =
+		(await rtc_kv.set(`offers:${game}:${roomCode}`, offersStr, {
+			GET: true,
+			NX: true,
+			EX: 600
+		})) ?? '';
+	if (oldValue !== '') {
+		return new Response(null, { status: 429 });
 	}
 
 	return new Response(null, { status: 204 });
+};
+
+export const GET: RequestHandler = async ({ params }) => {
+	const { game, roomCode } = params;
+	const rtc_kv = createClient({
+		password: RTC_KV_TOKEN,
+		socket: {
+			host: RTC_KV_URL,
+			port: RTC_KV_PORT
+		}
+	});
+	await rtc_kv.connect();
+	const offersStr: string =
+		(await rtc_kv.get(`offers:${game}:${roomCode}`)) ?? '{ "newPeerName": "", "offers": {} }';
+	// const offers: Record<string, { sdp: RTCSessionDescriptionInit, ices: RTCIceCandidate[] }> = JSON.parse(offersStr);
+	return new Response(offersStr, { status: 200, headers: { 'Content-Type': 'application/json' } });
 };
 
 export const DELETE: RequestHandler = async ({ params }) => {
@@ -43,8 +55,7 @@ export const DELETE: RequestHandler = async ({ params }) => {
 		}
 	});
 	await rtc_kv.connect();
-	const offersStr: string =
-		(await rtc_kv.getDel(`offers:${game}:${roomCode}`)) ?? '{ "newPeerName": "", "offers": {} }';
-	// const offers: Record<string, { sdp: RTCSessionDescriptionInit, ices: RTCIceCandidate[] }> = JSON.parse(offersStr);
-	return new Response(offersStr, { status: 200, headers: { 'Content-Type': 'application/json' } });
+	console.log("Deleted");
+	rtc_kv.del(`offers:${game}:${roomCode}`);
+	return new Response(null, { status: 204 });
 };

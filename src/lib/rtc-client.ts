@@ -1,3 +1,5 @@
+import { on } from "svelte/events";
+
 export type SdpOffer = { sdp: RTCSessionDescriptionInit; ices: RTCIceCandidate[] };
 export type SdpAnswer = { sdp: RTCSessionDescriptionInit; ices: RTCIceCandidate[] };
 
@@ -6,6 +8,9 @@ class NetworkPeer {
 	private rtcConnChannel: RTCDataChannel | null = null;
 	private dataChannels: Map<string, RTCDataChannel> = new Map();
 	onDisconnect: () => void = () => {};
+	onConnection: () => void = () => {};
+	private calledConnected: boolean = false;
+	private calledDisconnected: boolean = false;
 
 	private constructor() {}
 
@@ -20,7 +25,7 @@ class NetworkPeer {
 	 */
 	static async createHost(
 		onSdpOffer: (newPeerName: string, offer: SdpOffer) => void,
-		dataChannels: DataChannelInit[],
+		dataChannels: DataChannelInit[]
 	) {
 		const peer = new NetworkPeer();
 		peer.rtcConnChannel = peer.rtc.createDataChannel('rtc-conn', {
@@ -28,13 +33,22 @@ class NetworkPeer {
 			id: 0,
 			ordered: false
 		});
+		peer.rtcConnChannel.onopen = () => {
+			if (!peer.calledConnected) {
+				peer.calledConnected = true;
+				peer.onConnection();
+			}
+		};
 		peer.rtcConnChannel.onmessage = (event) => {
 			const obj = JSON.parse(event.data);
 			onSdpOffer(obj.newPeerName, obj.offer);
 		};
-		peer.rtcConnChannel.onclosing = () => {
-			peer.rtcConnChannel = null;
-			peer.onDisconnect();
+		peer.rtcConnChannel.onclose = () => {
+			if (!peer.calledDisconnected) {
+				peer.calledDisconnected = true;
+				peer.rtcConnChannel = null;
+				peer.onDisconnect();
+			}
 		};
 		for (const [id, dataChannelInit] of dataChannels.entries()) {
 			peer.createDataChannel(dataChannelInit.label, {
@@ -88,7 +102,6 @@ class NetworkPeer {
 	static async acceptOfferAsHost(
 		offer: SdpOffer,
 		dataChannels: DataChannelInit[],
-		onGuestPrematureClose: () => void
 	) {
 		const peer = new NetworkPeer();
 		peer.rtcConnChannel = peer.rtc.createDataChannel('rtc-conn', {
@@ -96,9 +109,18 @@ class NetworkPeer {
 			id: 0,
 			ordered: false
 		});
+		peer.rtcConnChannel.onopen = () => {
+			if (!peer.calledConnected) {
+				peer.calledConnected = true;
+				peer.onConnection();
+			}
+		};
 		peer.rtcConnChannel.onclose = () => {
-			peer.rtcConnChannel = null;
-			peer.onDisconnect();
+			if (!peer.calledDisconnected) {
+				peer.calledDisconnected = true;
+				peer.rtcConnChannel = null;
+				peer.onDisconnect();
+			}
 		};
 		for (const [id, dataChannelInit] of dataChannels.entries()) {
 			peer.createDataChannel(dataChannelInit.label, {
@@ -186,7 +208,18 @@ class NetworkPeer {
 
 	private createDataChannel(label: string, dataChannelInit: RTCDataChannelInit) {
 		const dataChannel = this.rtc.createDataChannel(label, dataChannelInit);
-		dataChannel.onclose = this.onDisconnect;
+		dataChannel.onclose = () => {
+			if (!this.calledDisconnected) {
+				this.calledDisconnected = true;
+				this.onDisconnect();
+			}
+		}
+		dataChannel.onopen = () => {
+			if (!this.calledConnected) {
+				this.calledConnected = true;
+				this.onConnection();
+			}
+		};
 		this.dataChannels.set(label, dataChannel);
 	}
 
@@ -275,7 +308,6 @@ export class NetworkClient {
 	private peers: Map<string, NetworkPeer> = new Map();
 	private dataChannels: DataChannelInit[];
 	private uploadAnswer: (newPeerName: string, answer: SdpAnswer) => void;
-	private advertise: (advertisement: { peerNames: string[]; hostName: string }) => void = () => {};
 	private onMessage: { channel: string; f: (from: string, data: MessageEvent) => void, from: Set<string> }[] = [];
 
 	private constructor(
@@ -336,11 +368,8 @@ export class NetworkClient {
 		ourName: string,
 		dataChannels: DataChannelInit[],
 		uploadAnswer: (newPeerName: string, answer: SdpAnswer) => void,
-		advertise: (advertisement: { peerNames: string[]; hostName: string }) => void
 	) {
 		const client = new NetworkClient(ourName, true, dataChannels, uploadAnswer, ourName);
-		client.advertise = advertise;
-		advertise(client.advertiseAsHost());
 		return client;
 	}
 
@@ -438,9 +467,6 @@ export class NetworkClient {
 				const { peer, answer } = await NetworkPeer.acceptOfferAsHost(
 					offer,
 					this.dataChannels,
-					() => {
-						this.onGuestDisconnect(peerName);
-					}
 				);
 				peerToAdd = peer;
 				this.uploadAnswer(peerName, answer);
@@ -448,19 +474,18 @@ export class NetworkClient {
 				this.peers.get(peerName)!.sendSdpOffer(newPeerName, offer);
 			}
 		}
-		this.peers.set(newPeerName, peerToAdd!);
 
 		for (const { channel, f, from } of this.onMessage) {
 			if (from.size === 0 || from.has(newPeerName)) {
 				peerToAdd!.setOnMessage(channel, (data) => f(newPeerName, data));
 			}
 		}
-		this.advertise(this.advertiseAsHost());
-		this.onConnection(newPeerName);
+
+		this.peers.set(newPeerName, peerToAdd!);
+		peerToAdd!.onConnection = () => this.onConnection(newPeerName);
 		peerToAdd!.onDisconnect = () => {
 			this.peers.delete(newPeerName);
 			this.onGuestDisconnect(newPeerName);
-			this.advertise(this.advertiseAsHost());
 		};
 
 		return true;
@@ -489,7 +514,7 @@ export class NetworkClient {
 			}
 		}
 		this.uploadAnswer(this.name, answer);
-		this.onConnection(newPeerName);
+		peer.onConnection = () => this.onConnection(newPeerName);
 		peer.onDisconnect = () => {
 			this.peers.delete(newPeerName);
 			this.onGuestDisconnect(newPeerName);
@@ -507,98 +532,4 @@ export class NetworkClient {
 
 export function createRoomCode() {
 	return Math.random().toString(36).substring(2, 8);
-}
-
-export function defaultUploadAnswer(gameName: string, roomCode: string) {
-	return (peerName: string, answer: SdpAnswer) => {
-		fetch(`/${gameName}/${roomCode}/answers/${peerName}`, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify({ peerName, answer })
-		});
-	};
-}
-
-export function defaultAdvertise(gameName: string, roomCode: string) {
-	return (advertisement: { peerNames: string[]; hostName: string }) => {
-		fetch(`/${gameName}/${roomCode}/advertise/`, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify(advertisement)
-		});
-	};
-}
-
-export async function defaultConnectToRoom(
-	gameName: string,
-	roomCode: string,
-	ourName: string,
-	dataChannels: DataChannelInit[],
-) {
-	while (true) {
-		let resp = await fetch(`/${gameName}/${roomCode}/advertise/`);
-
-		if (!resp.ok || resp.status !== 200) {
-			return null;
-		}
-
-		const advertisement: { peerNames: string[]; hostName: string } = await resp.json();
-		if (advertisement.hostName === '' || advertisement.hostName === ourName) {
-			return null;
-		}
-
-		const { challenge, offers } = await NetworkClient.connectToRoom({
-			ourName,
-			advertisement,
-			dataChannels,
-			uploadAnswer: defaultUploadAnswer(gameName, roomCode)
-		});
-		let offerCount = Object.keys(offers).length;
-		resp = await fetch(`/${gameName}/${roomCode}/offers/`, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify({ newPeerName: ourName, offers })
-		});
-		if (!resp.ok || resp.status !== 204) {
-			continue;
-		}
-		let client: NetworkClient | null = null;
-		while (offerCount > 0) {
-			await new Promise((resolve) => setTimeout(resolve, 2000));
-			resp = await fetch(`/${gameName}/${roomCode}/answers/${ourName}/`, {
-				method: 'DELETE'
-			});
-			if (!resp.ok || resp.status !== 200) {
-				continue;
-			}
-			const answers: { peerName: string; answer: SdpAnswer }[] = await resp.json();
-			offerCount -= answers.length;
-			// ?? Protects against the bug where the client is ready before all offers are accepted,
-			// as subsequent calls may overwrite with null. This scenario should not happen in practice.
-			client = (await challenge(answers)) ?? client;
-		}
-		return client;
-	}
-}
-
-export function defaultAcceptOffers(gameName: string, roomCode: string, client: NetworkClient) {
-	return setInterval(async () => {
-		const resp = await fetch(`/${gameName}/${roomCode}/offers/`, {
-			method: 'DELETE'
-		});
-		if (!resp.ok || resp.status !== 200) {
-			return;
-		}
-		const { newPeerName, offers } = await resp.json();
-		if (newPeerName === '') {
-			return;
-		}
-		await client.acceptSdpOffersAsHost(newPeerName, offers);
-	}, 2000);
 }
