@@ -1,5 +1,4 @@
 export type SdpOffer = { sdp: RTCSessionDescriptionInit, ices: RTCIceCandidate[] };
-export type SdpAnswer = { sdp: RTCSessionDescriptionInit };
 
 
 class NetworkPeer {
@@ -20,12 +19,13 @@ class NetworkPeer {
      * @param onHostPrematureClose 
      * @returns 
      */
-    static async createHost(onSdpOffer: (offer: SdpOffer) => void, dataChannels: DataChannelInit[], onHostPrematureClose: () => void) {
+    static async createHost(onSdpOffer: (newPeerName: string, offer: SdpOffer) => void, dataChannels: DataChannelInit[], onHostPrematureClose: () => void) {
         const peer = new NetworkPeer();
         peer.rtcConnChannel = peer.rtc.createDataChannel("rtc-conn", { negotiated: true, id: 0 });
         peer.connectionPhase = true;
         peer.rtcConnChannel.onmessage = (event) => {
-            onSdpOffer(JSON.parse(event.data));
+            const obj = JSON.parse(event.data);
+            onSdpOffer(obj.newPeerName, obj.offer);
         };
         peer.rtcConnChannel.onclosing = () => {
             if (peer.connectionPhase) {
@@ -72,7 +72,7 @@ class NetworkPeer {
      * @param onGuestPrematureClose 
      * @returns 
      */
-    static acceptOfferAsHost(offer: SdpOffer, dataChannels: DataChannelInit[], onGuestPrematureClose: () => void) {
+    static async acceptOfferAsHost(offer: SdpOffer, dataChannels: DataChannelInit[], onGuestPrematureClose: () => void) {
         const peer = new NetworkPeer();
         peer.rtcConnChannel = peer.rtc.createDataChannel("rtc-conn", { negotiated: true, id: 0 });
         peer.rtcConnChannel.onclosing = () => {
@@ -84,7 +84,12 @@ class NetworkPeer {
         for (const [id, dataChannelInit] of dataChannels.entries()) {
             peer.createDataChannel(dataChannelInit.label, { negotiated: true, id: id + 1, ...dataChannelInit });
         }
-        return peer;
+        await peer.rtc.setRemoteDescription(offer.sdp);
+
+        return {
+            peer,
+            answer: await peer.rtc.createAnswer()
+        };
     };
 
     /**
@@ -94,19 +99,17 @@ class NetworkPeer {
      * @param onGuestPrematureClose 
      * @returns 
      */
-    static acceptOfferAsGuest(offer: SdpOffer, dataChannels: DataChannelInit[], onGuestPrematureClose: () => void) {
+    static async acceptOfferAsGuest(offer: SdpOffer, dataChannels: DataChannelInit[], onGuestPrematureClose: () => void) {
         const peer = new NetworkPeer();
-        peer.rtcConnChannel = peer.rtc.createDataChannel("rtc-conn", { negotiated: true, id: 0 });
-        peer.rtcConnChannel.onclosing = () => {
-            if (peer.connectionPhase) {
-                onGuestPrematureClose();
-            }
-            peer.rtcConnChannel = null;
-        };
         for (const [id, dataChannelInit] of dataChannels.entries()) {
             peer.createDataChannel(dataChannelInit.label, { negotiated: true, id: id + 1, ...dataChannelInit });
         }
-        return peer;
+        await peer.rtc.setRemoteDescription(offer.sdp);
+
+        return {
+            peer,
+            answer: await peer.rtc.createAnswer()
+        };
     }
 
     close() {
@@ -122,11 +125,11 @@ class NetworkPeer {
         this.dataChannels.set(label, dataChannel);
     }
 
-    sendSdpOffer(offer: SdpOffer) {
+    sendSdpOffer(newPeerName: string, offer: SdpOffer) {
         if (this.rtcConnChannel === null) {
             console.error("RTC connection channel is null");
         } else {
-            this.rtcConnChannel.send(JSON.stringify(offer));
+            this.rtcConnChannel.send(JSON.stringify({ newPeerName, offer }));
         }
     }
 
@@ -169,7 +172,8 @@ export type ConnectToRoomInit = {
     ourName: string,
     advertisement: { peerNames: string[], hostName: string },
     dataChannels: DataChannelInit[],
-    onHostPrematureClose: () => void
+    onHostPrematureClose: () => void,
+    uploadAnswer: (newPeerName: string, answer: RTCSessionDescriptionInit) => void
 };
 
 export class NetworkClient {
@@ -177,41 +181,45 @@ export class NetworkClient {
     isHost: boolean;
     peers: Map<string, NetworkPeer> = new Map();
     dataChannels: DataChannelInit[];
+    uploadAnswer: (newPeerName: string, answer: RTCSessionDescriptionInit) => void;
     public onGuestDisconnect: (peerName: string) => void = () => {};
 
-    private constructor(name: string, isHost: boolean, dataChannels: DataChannelInit[]) {
+    private constructor(name: string, isHost: boolean, dataChannels: DataChannelInit[], uploadAnswer: (newPeerName: string, answer: RTCSessionDescriptionInit) => void) {
         this.name = name;
         this.isHost = isHost;
         this.dataChannels = dataChannels;
+        this.uploadAnswer = uploadAnswer
     }
 
     public static async connectToRoom(init: ConnectToRoomInit) {
-        const client = new NetworkClient(init.ourName, false, init.dataChannels);
+        const client = new NetworkClient(init.ourName, false, init.dataChannels, init.uploadAnswer);
         const offers = new Map<string, SdpOffer>();
         for (const peerName of init.advertisement.peerNames) {
             const { peer, offer } = await NetworkPeer.createGuest(init.dataChannels);
             offers.set(peerName, offer);
             client.peers.set(peerName, peer);
         }
-        {
-            const { peer, offer } = await NetworkPeer.createHost(
-                (offer) => {
-
-                },
-                init.dataChannels,
-                init.onHostPrematureClose
-            );
-            offers.set(init.advertisement.hostName, offer);
-            client.peers.set(init.advertisement.hostName, peer);
-        }
+        const { peer, offer } = await NetworkPeer.createHost(
+            client.acceptSdpOfferAsGuest,
+            init.dataChannels,
+            init.onHostPrematureClose
+        );
+        offers.set(init.advertisement.hostName, offer);
+        client.peers.set(init.advertisement.hostName, peer);
         return {
             client,
             offers
         };
     }
 
-    public static createRoom(ourName: string, dataChannels: DataChannelInit[]) {
-        return new NetworkClient(ourName, true, dataChannels);
+    finishConnectionPhase() {
+        for (const peer of this.peers.values()) {
+            peer.finishConnectionPhase();
+        }
+    }
+
+    public static createRoom(ourName: string, dataChannels: DataChannelInit[], uploadAnswer: (newPeerName: string, answer: RTCSessionDescriptionInit) => void) {
+        return new NetworkClient(ourName, true, dataChannels, uploadAnswer);
     }
 
     public close() {
@@ -234,53 +242,50 @@ export class NetworkClient {
     public async acceptSdpOffers(newPeerName: string, offers: Map<string, SdpOffer>) {
         if (!this.isHost) {
             console.error("Attempted to accept SDP offers even though not host");
-            return null;
+            return false;
         }
         // Check if all names are accounted for and there are no extra names
         const peerNames = new Set(Array.from(this.peers.keys()));
         const offerNames = new Set(offers.keys());
         if ((peerNames.size + 1) !== offerNames.size) {
-            return null;
+            return false;
         }
         for (const name of peerNames) {
             if (!offerNames.has(name)) {
-                return null;
+                return false;
             }
         }
         if (!offerNames.has(this.name)) {
-            return null;
+            return false;
         }
 
-        let answer: SdpAnswer | null = null;
+        let peerToAdd: NetworkPeer | null = null;
 
         for (const [peerName, offer] of offers) {
             if (peerName === this.name) {
-                const tmp = NetworkPeer.acceptOfferAsHost(offer, this.dataChannels, () => {
+                const { peer, answer } = await NetworkPeer.acceptOfferAsHost(offer, this.dataChannels, () => {
                     this.onGuestDisconnect(peerName);
                 });
+                peerToAdd = peer;
+                this.uploadAnswer(peerName, answer);
             } else {
-                this.peers.get(peerName)!.sendSdpOffer(offer);
+                this.peers.get(peerName)!.sendSdpOffer(newPeerName, offer);
             }
         }
+        this.peers.set(newPeerName, peerToAdd!);
 
-        return answer;
+        return true;
     }
 
-    // private async acceptSdpOffer(peerName: string, offer: SdpOffer) {
-    //     const pc = new RTCPeerConnection();
-    //     this.peers.set(peerName, pc);
-    //     await pc.setRemoteDescription(offer.sdp);
-    //     const answer = await pc.createAnswer();
-    //     await pc.setLocalDescription(answer);
-    //     return { sdp: answer };
-    // }
-
-    // private async acceptSdpAnswer(peerName: string, offer: SdpOffer) {
-    //     const pc = new RTCPeerConnection();
-    //     this.peers.set(peerName, pc);
-    //     await pc.setRemoteDescription(offer.sdp);
-    //     const answer = await pc.createAnswer();
-    //     await pc.setLocalDescription(answer);
-    //     return { sdp: answer };
-    // }
+    private async acceptSdpOfferAsGuest(peerName: string, offer: SdpOffer) {
+        if (this.isHost) {
+            console.error("Attempted to accept single SDP offer as host");
+            return;
+        }
+        const { peer, answer } = await NetworkPeer.acceptOfferAsGuest(offer, this.dataChannels, () => {
+            this.onGuestDisconnect(peerName);
+        });
+        this.peers.set(peerName, peer);
+        this.uploadAnswer(peerName, answer);
+    }
 }
