@@ -1,12 +1,15 @@
 <script lang="ts">
 	import {
 		createRoomCode,
-		defaultAcceptOffers,
-		defaultAdvertise,
-		defaultConnectToRoom,
-		defaultUploadAnswer,
 		NetworkClient
 	} from '$lib/rtc-client';
+	import {
+		defaultAcceptOffers,
+		defaultAdvertise,
+		defaultClearAdvertise,
+		defaultConnectToRoom,
+		defaultUploadAnswer
+	} from '$lib/rtc-defaults';
 
 	let roomCode = $state('');
 	let netClient: NetworkClient | null = $state(null);

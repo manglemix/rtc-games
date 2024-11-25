@@ -55,7 +55,6 @@ export const DELETE: RequestHandler = async ({ params }) => {
 		}
 	});
 	await rtc_kv.connect();
-	console.log('Deleted');
 	rtc_kv.del(`offers:${game}:${roomCode}`);
 	return new Response(null, { status: 204 });
 };

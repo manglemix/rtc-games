@@ -1,14 +1,16 @@
 <script lang="ts">
-	import { DATA_CHANNELS } from '$lib/hantu/game-state';
+	import { DATA_CHANNELS } from '$lib/hantu/game-state.svelte';
 	import Game from '$lib/hantu/Game.svelte';
 	import { createRoomCode, NetworkClient } from '$lib/rtc-client';
 	import {
 		defaultAcceptOffers,
 		defaultAdvertise,
+		defaultClearAdvertise,
 		defaultConnectToRoom,
 		defaultUploadAnswer
 	} from '$lib/rtc-defaults';
 	import { SvelteSet } from 'svelte/reactivity';
+
 	let netClient: NetworkClient | null = $state(null);
 	let onMainMenu = $state(true);
 	let name = $state('');
@@ -17,6 +19,7 @@
 	let joining = $state(false);
 	let acceptInterval: number = 0;
 	let peerNames: SvelteSet<string> = $state(new SvelteSet());
+	let startTime = $state(0);
 
 	function isNameValid() {
 		return name.length > 3 && name.length <= 12 && name.match(/^[a-zA-Z0-9]+$/);
@@ -57,6 +60,7 @@
 				{/each}
 				<button
 					onclick={() => {
+						defaultClearAdvertise('hantu', roomCode);
 						clearInterval(acceptInterval);
 						onMainMenu = false;
 						netClient!.onConnection = (newPeerName) => {
@@ -65,7 +69,8 @@
 						netClient!.onGuestDisconnect = (peerName) => {
 							peerNames.delete(peerName);
 						};
-						netClient!.send('game-state', 'StartGame');
+						startTime = Date.now();
+						netClient!.send('game-state', `{ "state": "StartGame", "startTime": ${startTime} }`);
 					}}>Start Game</button
 				>
 				<button
@@ -153,8 +158,10 @@
 						netClient!.close();
 						netClient = null;
 					};
-					netClient.setOnMessage('game-state', (message) => {
-						if (message === 'StartGame') {
+					netClient.setOnMessage('game-state', (from, message) => {
+						const obj = JSON.parse(message.data);
+						if (obj["state"] === 'StartGame') {
+							startTime = obj["startTime"];
 							onMainMenu = false;
 						}
 					});
@@ -164,7 +171,7 @@
 		{/if}
 	</section>
 {:else}
-	<Game netClient={netClient!} />
+	<Game netClient={netClient!} {roomCode} {startTime} />
 {/if}
 
 <style>

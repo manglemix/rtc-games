@@ -1,24 +1,22 @@
 <script lang="ts">
 	import type { NetworkClient } from '$lib/rtc-client';
-	import { setContext } from 'svelte';
-	import { GameState } from './game-state';
-	import FirstInfo from './menus/FirstInfo.svelte';
-	import { browser } from '$app/environment';
+	import { onMount, setContext } from 'svelte';
+	import { GameState, State } from './game-state.svelte';
+	import FirstInfo from './ui/FirstInfo.svelte';
+	import MainLevel from './levels/MainLevel.svelte';
 
-	let { netClient }: { netClient: NetworkClient } = $props();
-	let gameState = new GameState(netClient);
-	let pageId = $state('first-info');
+	let { netClient, roomCode, startTime }: { netClient: NetworkClient, roomCode: string, startTime: number } = $props();
+	let gameState = new GameState(netClient, roomCode, startTime);
 
 	setContext('gameState', gameState);
 
-	if (browser) {
+	onMount(() => {
 		document.documentElement.requestFullscreen();
-	}
+	});
 </script>
 
-{#if pageId === 'first-info'}
+{#if gameState.state === State.FirstInfo}
 	<FirstInfo />
 {:else}
-	<output>Unknown pageId: {pageId}. Please report.</output>
-	<a href="/">Return to Home</a>
+	<MainLevel backgroundUrl="/hantu/among-us-map-979738868.jpg" backgroundWidth={1418} backgroundHeight={824} />
 {/if}
