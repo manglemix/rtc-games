@@ -1,8 +1,5 @@
 <script lang="ts">
-	import {
-		createRoomCode,
-		NetworkClient
-	} from '$lib/rtc-client';
+	import { createRoomCode, NetworkClient } from '$lib/rtc-client';
 	import {
 		defaultAcceptOffers,
 		defaultAdvertise,

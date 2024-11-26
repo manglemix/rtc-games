@@ -26,7 +26,7 @@ export function defaultAdvertise(gameName: string, roomCode: string) {
 
 export function defaultClearAdvertise(gameName: string, roomCode: string) {
 	return fetch(`/${gameName}/${roomCode}/advertise/`, {
-		method: 'DELETE',
+		method: 'DELETE'
 	});
 }
 

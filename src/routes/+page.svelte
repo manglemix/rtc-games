@@ -1,8 +1,8 @@
 <script>
-	import { invalidate } from "$app/navigation";
-	import Timer from "$lib/hantu/ui/Timer.svelte";
-
+	import { invalidate } from '$app/navigation';
+	import Timer from '$lib/hantu/ui/Timer.svelte';
 </script>
+
 <header class="m-4 flex flex-col items-center">
 	<h1 class="text-4xl font-bold">Welcome to RTC Games</h1>
 	<p>

@@ -18,32 +18,32 @@
 	const VISIBLE_RADIUS = 100;
 	const gameState: GameState = getContext('gameState');
 	const player = gameState.player;
+	let movementVector = new Vector2(0, 0);
 
 	function keyDown(event: KeyboardEvent) {
 		if (event.defaultPrevented) {
 			return; // Do nothing if event already handled
 		}
 
-		let velocity = player.velocity;
 		switch (event.code) {
 			case 'KeyS':
 			case 'ArrowDown':
-				velocity.y = 1;
+				movementVector.y = 1;
 				break;
 			case 'KeyW':
 			case 'ArrowUp':
-				velocity.y = -1;
+				movementVector.y = -1;
 				break;
 			case 'KeyA':
 			case 'ArrowLeft':
-				velocity.x = -1;
+				movementVector.x = -1;
 				break;
 			case 'KeyD':
 			case 'ArrowRight':
-				velocity.x = 1;
+				movementVector.x = 1;
 				break;
 		}
-		player.setVelocity(velocity.normalize() * 20);
+		player.setVelocity(movementVector.normalize().mul(20));
 
 		if (event.code !== 'Tab') {
 			// Consume the event so it doesn't get handled twice,
@@ -61,26 +61,26 @@
 		switch (event.code) {
 			case 'KeyS':
 			case 'ArrowDown':
-				velocity.y = 0;
+				movementVector.y = 0;
 				break;
 			case 'KeyW':
 			case 'ArrowUp':
-				velocity.y = -0;
+				movementVector.y = -0;
 				break;
 			case 'KeyA':
 			case 'ArrowLeft':
-				velocity.x = -0;
+				movementVector.x = -0;
 				break;
 			case 'KeyD':
 			case 'ArrowRight':
-				velocity.x = 0;
+				movementVector.x = 0;
 				break;
 		}
-		player.setVelocity(velocity.normalize() * 10);
+		player.setVelocity(movementVector.normalize().mul(20));
 	}
 
 	onMount(() => {
-		window.onresize = () => {
+		const onResize = () => {
 			windowWidth = window.innerWidth;
 			windowHeight = window.innerHeight;
 			const maxDimension = Math.max(windowWidth, windowHeight);
@@ -88,7 +88,8 @@
 			bgWidth = backgroundWidth * bgScale;
 			bgHeight = backgroundHeight * bgScale;
 		};
-		window.onresize();
+		window.onresize = onResize;
+		onResize();
 
 		processInterval = setInterval(() => {
 			player.process(0.016);
@@ -124,5 +125,8 @@
 		top: var(--top);
 		left: var(--left);
 		overflow: hidden;
+		image-rendering: pixelated;
+		image-rendering: -moz-crisp-edges;
+		image-rendering: crisp-edges;
 	}
 </style>

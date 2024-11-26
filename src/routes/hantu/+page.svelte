@@ -160,8 +160,8 @@
 					};
 					netClient.setOnMessage('game-state', (from, message) => {
 						const obj = JSON.parse(message.data);
-						if (obj["state"] === 'StartGame') {
-							startTime = obj["startTime"];
+						if (obj['state'] === 'StartGame') {
+							startTime = obj['startTime'];
 							onMainMenu = false;
 						}
 					});

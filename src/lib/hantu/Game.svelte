@@ -5,7 +5,11 @@
 	import FirstInfo from './ui/FirstInfo.svelte';
 	import MainLevel from './levels/MainLevel.svelte';
 
-	let { netClient, roomCode, startTime }: { netClient: NetworkClient, roomCode: string, startTime: number } = $props();
+	let {
+		netClient,
+		roomCode,
+		startTime
+	}: { netClient: NetworkClient; roomCode: string; startTime: number } = $props();
 	let gameState = new GameState(netClient, roomCode, startTime);
 
 	setContext('gameState', gameState);
@@ -18,5 +22,9 @@
 {#if gameState.state === State.FirstInfo}
 	<FirstInfo />
 {:else}
-	<MainLevel backgroundUrl="/hantu/among-us-map-979738868.jpg" backgroundWidth={1418} backgroundHeight={824} />
+	<MainLevel
+		backgroundUrl="/hantu/among-us-map-979738868.jpg"
+		backgroundWidth={1418}
+		backgroundHeight={824}
+	/>
 {/if}

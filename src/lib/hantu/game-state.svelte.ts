@@ -12,7 +12,7 @@ export const DATA_CHANNELS: DataChannelInit[] = [
 	{
 		label: 'player-kinematics',
 		ordered: false,
-		maxRetransmits: 0,
+		maxRetransmits: 0
 	}
 ];
 
@@ -25,7 +25,7 @@ export enum State {
 	Day,
 	Night,
 	FinalVote
-};
+}
 
 export class GameState {
 	public readonly netClient: NetworkClient;
@@ -56,20 +56,20 @@ export class GameState {
 		this.netClient = netClient;
 		this.rng = sfc32StrSeeded(roomCode);
 		this.startTimeMsecs = startTimeMsecs;
-		netClient.setOnMessage("game-state", (from, msg) => {
+		netClient.setOnMessage('game-state', (from, msg) => {
 			const obj = JSON.parse(msg.data);
 			if (obj.elapsedMsecs) {
 				this._elapsedMsecs = obj.elapsedMsecs;
 			}
 			if (obj.action) {
 				switch (obj.action) {
-					case "skip":
+					case 'skip':
 						if (obj.state === this._state) {
 							this.skipTimer();
 						}
 						break;
 					default:
-						console.error("Unknown action: " + obj.action);
+						console.error('Unknown action: ' + obj.action);
 				}
 			}
 		});
@@ -107,12 +107,15 @@ export class GameState {
 			this._elapsedMsecs += Date.now() - this.timerStartTimeMsecs;
 			clearTimeout(this.timeoutId);
 			this.timeoutId = undefined;
-			this.netClient.send("game-state", JSON.stringify({ elapsedMsecs: this._elapsedMsecs, action: "skip", state: this._state }));
+			this.netClient.send(
+				'game-state',
+				JSON.stringify({ elapsedMsecs: this._elapsedMsecs, action: 'skip', state: this._state })
+			);
 			if (this.timeoutCallback) {
 				this.timeoutCallback();
 				this.timeoutCallback = undefined;
 			} else {
-				console.error("No callback to call");
+				console.error('No callback to call');
 			}
 		}
 	}
@@ -120,14 +123,17 @@ export class GameState {
 	private elapseTime(durationSecs: number, callback: () => void) {
 		this.timerStartTimeMsecs = Date.now();
 		this.timeoutCallback = callback;
-		this.timeoutId = setTimeout(() => {
-			this.timeoutId = undefined;
-			this._elapsedMsecs += durationSecs * 1000;
-			if (this.timeoutCallback) {
-				this.timeoutCallback();
-				this.timeoutCallback = undefined;
-			}
-		}, durationSecs * 1000 + this._elapsedMsecs + this.startTimeMsecs - Date.now());
+		this.timeoutId = setTimeout(
+			() => {
+				this.timeoutId = undefined;
+				this._elapsedMsecs += durationSecs * 1000;
+				if (this.timeoutCallback) {
+					this.timeoutCallback();
+					this.timeoutCallback = undefined;
+				}
+			},
+			durationSecs * 1000 + this._elapsedMsecs + this.startTimeMsecs - Date.now()
+		);
 	}
 
 	private enterKeyProposition() {
@@ -139,9 +145,9 @@ export class GameState {
 
 	/**
 	 * Generate a random integer between min and max (inclusive)
-	 * @param min 
-	 * @param max 
-	 * @returns 
+	 * @param min
+	 * @param max
+	 * @returns
 	 */
 	private randInt(min: number, max: number): number {
 		return Math.floor(this.rng() * (max - min + 1) + min);
@@ -156,7 +162,7 @@ export class Player {
 	private _velocity: Vector2 = $state(new Vector2(0, 0));
 	private _origin: Vector2 = $state(new Vector2(0, 0));
 
-	constructor(private readonly gameState: GameState) { }
+	constructor(private readonly gameState: GameState) {}
 
 	get origin() {
 		return this._origin;
@@ -168,12 +174,12 @@ export class Player {
 
 	public setOrigin(origin: Vector2) {
 		this._origin = origin;
-		this.gameState.netClient.send("player-kinematics", JSON.stringify({ origin: this._origin }));
+		this.gameState.netClient.send('player-kinematics', JSON.stringify({ origin: this._origin }));
 	}
 
 	public setVelocity(velocity: Vector2) {
 		this._velocity = velocity;
-		this.gameState.netClient.send("player-kinematics", JSON.stringify({ velocity: this.velocity }));
+		this.gameState.netClient.send('player-kinematics', JSON.stringify({ velocity: this.velocity }));
 	}
 
 	public process(delta: number) {
