@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { getContext, onDestroy, onMount } from 'svelte';
-	import type { GameState } from '../game-state.svelte';
+	import { State, type GameState } from '../game-state.svelte';
 	import { Vector2 } from '$lib';
+	import { Image as ImageObj } from "image-js";
 
 	let bgWidth = $state(0);
 	let bgHeight = $state(0);
@@ -18,11 +19,17 @@
 	const VISIBLE_RADIUS = 100;
 	const gameState: GameState = getContext('gameState');
 	const player = gameState.player;
+	let playerX = $state(player.origin.x);
+	let playerY = $state(player.origin.y);
 	let movementVector = new Vector2(0, 0);
 
 	function keyDown(event: KeyboardEvent) {
 		if (event.defaultPrevented) {
 			return; // Do nothing if event already handled
+		}
+
+		if (gameState.state !== State.Day && gameState.state !== State.Night) {
+			return;
 		}
 
 		switch (event.code) {
@@ -43,7 +50,7 @@
 				movementVector.x = 1;
 				break;
 		}
-		player.setVelocity(movementVector.normalize().mul(20));
+		player.velocity = movementVector.normalize().mul(20);
 
 		if (event.code !== 'Tab') {
 			// Consume the event so it doesn't get handled twice,
@@ -57,7 +64,6 @@
 			return; // Do nothing if event already handled
 		}
 
-		let velocity = player.velocity;
 		switch (event.code) {
 			case 'KeyS':
 			case 'ArrowDown':
@@ -76,10 +82,10 @@
 				movementVector.x = 0;
 				break;
 		}
-		player.setVelocity(movementVector.normalize().mul(20));
+		player.velocity = movementVector.normalize().mul(20);
 	}
 
-	onMount(() => {
+	onMount(async () => {
 		const onResize = () => {
 			windowWidth = window.innerWidth;
 			windowHeight = window.innerHeight;
@@ -90,9 +96,12 @@
 		};
 		window.onresize = onResize;
 		onResize();
+		player.collisionMask = await ImageObj.load('/hantu/among-us-map-979738868-collision.png');
 
 		processInterval = setInterval(() => {
 			player.process(0.016);
+			playerX = player.origin.x;
+			playerY = player.origin.y;
 		}, 16);
 
 		window.addEventListener('keydown', keyDown, true);
@@ -110,23 +119,43 @@
 	src={backgroundUrl}
 	alt="Background"
 	id="background"
-	style="--bg-width: {bgWidth}px;
-        --bg-height: {bgHeight}px;
-        --left: {-player.origin.x * bgScale + windowWidth / 2}px;
-        --top: {-player.origin.y * bgScale + windowHeight / 2}px"
+	style="--width: {bgWidth}px;
+        --height: {bgHeight}px;
+        --left: {-playerX * bgScale + windowWidth / 2}px;
+        --top: {-playerY * bgScale + windowHeight / 2}px"
+/>
+
+<img
+	src="/hantu/tzsbmui4vdq51-221852797.png"
+	alt="Player"
+	class="player"
+	style="--width: {23.00 * bgScale / 2}px;
+        --height: {29.64 * bgScale / 2}px;
+        --left: {windowWidth / 2 - bgScale * 23.00 / 2 / 2}px;
+        --top: {windowHeight / 2 - bgScale * 29.64 / 2 / 2}px"
 />
 
 <style>
 	#background {
 		position: fixed;
 		max-width: none;
-		width: var(--bg-width);
-		height: var(--bg-height);
+		width: var(--width);
+		height: var(--height);
 		top: var(--top);
 		left: var(--left);
 		overflow: hidden;
 		image-rendering: pixelated;
 		image-rendering: -moz-crisp-edges;
-		image-rendering: crisp-edges;
+	}
+	.player {
+		position: fixed;
+		max-width: none;
+		width: var(--width);
+		height: var(--height);
+		top: var(--top);
+		left: var(--left);
+		overflow: hidden;
+		image-rendering: pixelated;
+		image-rendering: -moz-crisp-edges;
 	}
 </style>

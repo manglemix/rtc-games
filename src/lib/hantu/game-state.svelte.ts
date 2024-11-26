@@ -1,5 +1,6 @@
 import { sfc32StrSeeded, Vector2 } from '$lib';
 import type { DataChannelInit, NetworkClient } from '$lib/rtc-client';
+import { Image as ImageObj } from "image-js";
 
 export const DATA_CHANNELS: DataChannelInit[] = [
 	{
@@ -159,8 +160,9 @@ export class GameState {
 }
 
 export class Player {
-	private _velocity: Vector2 = $state(new Vector2(0, 0));
-	private _origin: Vector2 = $state(new Vector2(0, 0));
+	private _velocity: Vector2 = new Vector2(0, 0);
+	private _origin: Vector2 = new Vector2(200, 260);
+	public collisionMask?: ImageObj;
 
 	constructor(private readonly gameState: GameState) {}
 
@@ -172,17 +174,55 @@ export class Player {
 		return this._velocity;
 	}
 
-	public setOrigin(origin: Vector2) {
-		this._origin = origin;
+	set origin(newOrigin: Vector2) {
+		this._origin = newOrigin;
 		this.gameState.netClient.send('player-kinematics', JSON.stringify({ origin: this._origin }));
 	}
 
-	public setVelocity(velocity: Vector2) {
-		this._velocity = velocity;
+	set velocity(newVelocity: Vector2) {
+		this._velocity = newVelocity;
 		this.gameState.netClient.send('player-kinematics', JSON.stringify({ velocity: this.velocity }));
 	}
 
 	public process(delta: number) {
-		this._origin = this._origin.add(this._velocity.mul(delta));
+		const step = this.velocity.mul(delta);
+		if (this.collisionMask) {
+			let stepAbs = step.abs();
+			const sign = step.sign();
+			const toCheck = this.origin;
+			while (stepAbs.x > 0) {
+				const oldToCheckX = toCheck.x;
+				if (stepAbs.x >= 1) {
+					stepAbs.x -= 1;
+					toCheck.x += sign.x;
+				} else {
+					toCheck.x += stepAbs.x * sign.x;
+					stepAbs.x = 0;
+				}
+				if (this.collisionMask.getPixelXY(Math.round(toCheck.x), Math.round(toCheck.y))[0] !== 0) {
+					this.velocity.x = 0;
+					toCheck.x = oldToCheckX;
+					break;
+				}
+			}
+			while (stepAbs.y > 0) {
+				const oldToCheckY = toCheck.y;
+				if (stepAbs.y >= 1) {
+					stepAbs.y -= 1;
+					toCheck.y += sign.y;
+				} else {
+					toCheck.y += stepAbs.y * sign.y;
+					stepAbs.y = 0;
+				}
+				if (this.collisionMask.getPixelXY(Math.round(toCheck.x), Math.round(toCheck.y))[0] !== 0) {
+					this.velocity.y = 0;
+					toCheck.y = oldToCheckY;
+					break;
+				}
+			}
+			this.origin = toCheck;
+		} else {
+			this.origin = this.origin.add(step);
+		}
 	}
 }

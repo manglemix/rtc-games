@@ -104,4 +104,16 @@ export class Vector2 {
 		}
 		return this.div(this.length());
 	}
+
+	public abs() {
+		return new Vector2(Math.abs(this.x), Math.abs(this.y));
+	}
+
+	public sign() {
+		return new Vector2(Math.sign(this.x), Math.sign(this.y));
+	}
+
+	public round() {
+		return new Vector2(Math.round(this.x), Math.round(this.y));
+	}
 }
