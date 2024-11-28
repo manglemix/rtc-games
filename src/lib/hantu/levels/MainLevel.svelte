@@ -96,12 +96,6 @@
 		window.onresize = onResize;
 		onResize();
 
-		processInterval = setInterval(() => {
-			for (const player of gameState.players.values()) {
-				player.process(0.016);
-			}
-		}, 16);
-
 		window.addEventListener('keydown', keyDown, true);
 		window.addEventListener('keyup', keyUp, true);
 	});

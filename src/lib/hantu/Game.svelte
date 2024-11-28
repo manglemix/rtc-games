@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { NetworkClient } from '$lib/rtc-client';
-	import { onMount, setContext } from 'svelte';
+	import { onDestroy, onMount, setContext } from 'svelte';
 	import { GameState, State } from './game-state.svelte';
 	import FirstInfo from './ui/FirstInfo.svelte';
 	import MainLevel from './levels/MainLevel.svelte';
@@ -9,14 +9,18 @@
 	let {
 		netClient,
 		roomCode,
-		startTime
-	}: { netClient: NetworkClient; roomCode: string; startTime: number } = $props();
-	let gameState = new GameState(netClient, roomCode, startTime);
+	}: { netClient: NetworkClient; roomCode: string } = $props();
+	let gameState = GameState.create(netClient, roomCode, DEBUG_LEVEL);
 
 	setContext('gameState', gameState);
 
 	onMount(() => {
 		document.documentElement.requestFullscreen();
+	});
+
+	onDestroy(() => {
+		gameState.close();
+		document.exitFullscreen();
 	});
 </script>
 

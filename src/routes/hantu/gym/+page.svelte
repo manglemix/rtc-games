@@ -10,8 +10,7 @@
 		() => {}
 	);
 	let roomCode = createRoomCode();
-	let startTime = Date.now();
 </script>
 
 <Background />
-<Game netClient={netClient} {roomCode} {startTime} />
+<Game netClient={netClient} {roomCode} />

@@ -20,12 +20,15 @@ export const DATA_CHANNELS: DataChannelInit[] = [
 ];
 
 type GameStateMessage = {
-	elapsedMsecs: number,
-	setState?: { state: State }
+	setState?: { state: State, endTimeMsecs: number }
 };
 type KeyActionMessage = {
 	propose?: { names: string[], final?: boolean },
 	vote?: { value: boolean }
+};
+type KinematicsMessage = {
+	origin?: { x: number, y: number },
+	velocity?: { x: number, y: number }
 };
 
 const POSSESSED_RATIO = 0.3333333;
@@ -271,10 +274,7 @@ export enum State {
 // }
 
 export abstract class GameState {
-	abstract get state(): State;
-	abstract get areWePossessed(): boolean;
-
-	get requiredProposals(): number {
+	public get requiredProposals(): number {
 		return $derived.by(() => {
 			let aliveCount = 0;
 			for (const player of this.players.values()) {
@@ -289,17 +289,30 @@ export abstract class GameState {
 		});
 	}
 
+	public get state(): State {
+		return this._state;
+	}
+
+	public get stateEndTimeMsecs(): State {
+		return this._stateEndTimeMsecs;
+	}
+
+	public get proposerIndex(): number {
+		return this._proposerIndex;
+	}
+
 	public proposals: SvelteSet<string> = $state(new SvelteSet());
 	public readonly thisPlayer: ThisPlayer;
 	public readonly players: Map<string, Player> = new Map<string, Player>();
-	public readonly possessed: Set<Player> = new Set<Player>();
-
-	public abstract finalizeProposals(): void;
 
 	protected netClient: NetworkClient;
-
 	protected rng: () => number;
-	private updatePlayerKinematicsInterval = 0;
+	protected _stateEndTimeMsecs: number = $state(Date.now());
+
+	private _state: State = $state(State.FirstInfo);
+	private _proposerIndex = $state(0);
+	private propagatePlayerKinematicsInterval = 0;
+	private processPlayerKinematicsInterval = 0;
 
 	constructor(netClient: NetworkClient, roomCode: string, level: Level) {
 		this.rng = sfc32StrSeeded(roomCode);
@@ -311,17 +324,20 @@ export abstract class GameState {
 		this.thisPlayer = new ThisPlayer(level.collisionMaskUrl, netClient.name);
 		this.players.set(netClient.name, this.thisPlayer);
 
-		const possessedCount = Math.max(Math.round(POSSESSED_RATIO * (this.players.size)), 1);
-		const names = Array.from(this.players.keys());
-		names.sort();
-
-		while (this.possessed.size < possessedCount) {
-			const name = names[this.randInt(0, names.length - 1)];
-			this.possessed.add(this.players.get(name)!);
+		{
+			const possessedCount = Math.max(Math.round(POSSESSED_RATIO * (this.players.size)), 1);
+			const ordered = this.getNetworkOrderedPlayers();
+			const possessed = new Set<Player>();
+	
+			while (possessed.size < possessedCount) {
+				const player = ordered[this.randInt(0, ordered.length - 1)];
+				possessed.add(player);
+				player._possessed = true;
+			}
 		}
 
 		// Propagate player kinematics at 20fps
-		this.updatePlayerKinematicsInterval = setInterval(() => {
+		this.propagatePlayerKinematicsInterval = setInterval(() => {
 			if (this.state === State.Day || this.state === State.Night) {
 				this.netClient.send(
 					'player-kinematics',
@@ -332,8 +348,8 @@ export abstract class GameState {
 				);
 			}
 		}, 50);
-		this.netClient.setOnMessage('player-kinematics', (from, msg) => {
-			const obj = JSON.parse(msg.data);
+		netClient.setOnMessage('player-kinematics', (from, msg) => {
+			const obj: KinematicsMessage = JSON.parse(msg.data);
 			const player = this.players.get(from);
 			if (player) {
 				if (obj.origin) {
@@ -346,11 +362,69 @@ export abstract class GameState {
 				console.error('Received player kinematics from unknown player: ' + from);
 			}
 		});
+		this.processPlayerKinematicsInterval = setInterval(() => {
+			for (const player of this.players.values()) {
+				player.process(0.016);
+			}
+		}, 16);
+
+		$effect(() => {
+			if (this.getNetworkOrderedPlayers()[this.proposerIndex].name === this.thisPlayer.name) {
+				this.sendKeyAction({ propose: { names: Array.from(this.proposals) } });
+			}
+		});
+		$effect(() => {
+			if (this.thisPlayer.currentVote !== undefined) {
+				this.sendKeyAction({ vote: { value: this.thisPlayer.currentVote } });
+			}
+		});
+	}
+
+	public static create(netClient: NetworkClient, roomCode: string, level: Level): GameState {
+		if (netClient.isHost) {
+			return new HostGameState(netClient, roomCode, level);
+		} else {
+			return new GuestGameState(netClient, roomCode, level);
+		}
+	}
+
+	public finalizeProposals(): void {
+		this.sendKeyAction({ propose: { names: Array.from(this.proposals), final: true } });
+	}
+
+	public getNetworkOrderedPlayers(): Player[] {
+		const players = Array.from(this.players.values());
+		players.sort((a, b) => a.name.localeCompare(b.name));
+		return players;
 	}
 
 	public close() {
-		clearInterval(this.updatePlayerKinematicsInterval);
+		clearInterval(this.propagatePlayerKinematicsInterval);
+		clearInterval(this.processPlayerKinematicsInterval);
 		this.netClient.close();
+	}
+
+	protected setState(newState: State): boolean {
+		if (this._state === newState) {
+			return false;
+		}
+		switch (newState) {
+			case State.KeyProposition:
+				if (this._state === State.KeyVote) {
+					this._proposerIndex = (this._proposerIndex + 1) % this.players.size;
+				} else {
+					this._proposerIndex = 0;
+				}
+				this.proposals.clear();
+				break;
+			case State.KeyVote:
+				for (const player of this.players.values()) {
+					player._currentVote = undefined;
+				}
+				break;
+		}
+		this._state = newState;
+		return true;
 	}
 
 	/**
@@ -380,28 +454,141 @@ export abstract class GameState {
 	}
 }
 
+class HostGameState extends GameState {
+	protected setState(newState: State): boolean {
+		if (!super.setState(newState)) {
+			return false;
+		}
+		let endTimeMsecs = Date.now();
+
+		switch (newState) {
+			case State.FirstInfo:
+				endTimeMsecs += 5000;
+				break;
+			case State.KeyProposition:
+				endTimeMsecs += 30000;
+				break;
+			case State.KeyVote:
+				endTimeMsecs += 50000;
+				break;
+			case State.KeyVoteResults:
+				endTimeMsecs += 3000;
+				break;
+			case State.Day:
+				endTimeMsecs += 120000;
+				break;
+			case State.Night:
+				endTimeMsecs += 100000;
+				break;
+			case State.FinalVote:
+				endTimeMsecs += 30000;
+				break;
+			default:
+				console.error('Unknown state: ' + newState);
+		}
+
+		this._stateEndTimeMsecs = endTimeMsecs;
+		this.sendGameState({ setState: { state: State.KeyVote, endTimeMsecs } });
+		return true;
+	}
+
+	constructor(netClient: NetworkClient, roomCode: string, level: Level) {
+		super(netClient, roomCode, level);
+
+		netClient.setOnMessage('key-action', (from, msg) => {
+			const obj: KeyActionMessage = JSON.parse(msg.data);
+			if (obj.vote) {
+				const player = this.players.get(from);
+				if (player) {
+					player._currentVote = obj.vote.value;
+				} else {
+					console.error('Received vote from unknown player: ' + from);
+				}
+				for (const player of this.players.values()) {
+					if (player._currentVote === undefined) {
+						return;
+					}
+				}
+				this.setState(State.KeyVoteResults);
+			} else if (obj.propose) {
+				this.proposals = new SvelteSet(obj.propose.names);
+				if (obj.propose.final) {
+					this.setState(State.KeyVote);
+				}
+			}
+		});
+	}
+
+	public finalizeProposals(): void {
+		super.finalizeProposals();
+		this.setState(State.KeyVote);
+	}
+}
+
+class GuestGameState extends GameState {
+	constructor(netClient: NetworkClient, roomCode: string, level: Level) {
+		super(netClient, roomCode, level);
+
+		netClient.setOnMessage('game-state', (from, msg) => {
+			if (from !== netClient.hostName) {
+				console.error('Received game state message from non-host: ' + from);
+				return;
+			}
+			const msgObj: GameStateMessage = JSON.parse(msg.data);
+			if (msgObj.setState) {
+				this._stateEndTimeMsecs = msgObj.setState.endTimeMsecs;
+				this.setState(msgObj.setState.state);
+			}
+		});
+
+		netClient.setOnMessage('key-action', (from, msg) => {
+			const obj: KeyActionMessage = JSON.parse(msg.data);
+			if (obj.vote) {
+				const player = this.players.get(from);
+				if (player) {
+					player._currentVote = obj.vote.value;
+				} else {
+					console.error('Received vote from unknown player: ' + from);
+				}
+			} else if (obj.propose) {
+				this.proposals = new SvelteSet(obj.propose.names);
+			}
+		});
+	}
+}
+
 export class Player {
 	protected _velocity: Vector2 = $state(new Vector2(0, 0));
 	protected _origin: Vector2 = $state(new Vector2(200, 260));
 	protected _alive = $state(true);
+	_currentVote?: boolean = $state(undefined);
+	_possessed = false;
 
-	get origin() {
+	public get currentVote() {
+		return this._currentVote;
+	}
+
+	public get possessed() {
+		return this._possessed;
+	}
+
+	public get origin() {
 		return this._origin;
 	}
 
-	get velocity() {
+	public get velocity() {
 		return this._velocity;
 	}
 
-	get alive() {
+	public get alive() {
 		return this._alive;
 	}
 
-	set origin(newOrigin: Vector2) {
+	public set origin(newOrigin: Vector2) {
 		this._origin = newOrigin;
 	}
 
-	set velocity(newVelocity: Vector2) {
+	public set velocity(newVelocity: Vector2) {
 		this._velocity = newVelocity;
 	}
 
@@ -409,13 +596,14 @@ export class Player {
 
 	}
 
-	public process(delta: number) {
+	process(delta: number) {
 		this.origin = this.origin.add(this.velocity.mul(delta));
 	}
 }
 
 export class ThisPlayer extends Player {
 	private collisionMask?: ImageObj;
+
 	constructor(collisionMaskUrl: string, name: string) {
 		super(name);
 		ImageObj.load(collisionMaskUrl).then((img) => {
@@ -423,7 +611,11 @@ export class ThisPlayer extends Player {
 		});
 	}
 
-	public process(delta: number) {
+	public setVote(vote: boolean) {
+		this._currentVote = vote;
+	}
+
+	process(delta: number) {
 		const step = this.velocity.mul(delta);
 		if (this.collisionMask) {
 			let stepAbs = step.abs();
