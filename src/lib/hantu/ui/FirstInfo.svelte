@@ -8,11 +8,13 @@
 
 <div class="flex h-screen w-screen flex-col justify-between">
 	<section>
-		{#if gameState.areWePossessed()}
+		{#if gameState.areWePossessed}
 			<h1>YOU ARE POSSESSED</h1>
-			{#if gameState.getPossessed().size > 1}
-				{#each gameState.getOtherPossessed() as possessed}
-					<p>{possessed}</p>
+			{#if gameState.possessed.size > 1}
+				{#each gameState.possessed as player}
+					{#if player.name !== gameState.thisPlayer.name}
+						<p>{name}</p>
+					{/if}
 				{/each}
 			{/if}
 			<p>Do not reveal your identity. Kill everyone.</p>
@@ -20,9 +22,9 @@
 			<h1>YOU ARE INNOCENT</h1>
 		{/if}
 	</section>
-
-	<Timer duration={5} />
 </div>
+
+<Timer duration={5} />
 
 <style>
 	h1,

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 
-	let { duration }: { duration: number } = $props();
+	let { duration, id }: { duration: number, id?: string } = $props();
 
 	let timerInterval = 0;
 	let percentage = $state(100);
@@ -22,4 +22,11 @@
 	});
 </script>
 
-<progress class="w-full" value={percentage} max="100"></progress>
+<progress class="w-full" value={percentage} max="100" {id}></progress>
+
+<style>
+	progress {
+		position: fixed;
+		bottom: 0;
+	}
+</style>
