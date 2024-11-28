@@ -4,6 +4,7 @@
 	import { GameState, State } from './game-state.svelte';
 	import FirstInfo from './ui/FirstInfo.svelte';
 	import MainLevel from './levels/MainLevel.svelte';
+	import { DEBUG_LEVEL } from './levels/level.svelte';
 
 	let {
 		netClient,
@@ -23,8 +24,6 @@
 	<FirstInfo />
 {:else}
 	<MainLevel
-		backgroundUrl="/hantu/among-us-map-979738868.jpg"
-		backgroundWidth={1418}
-		backgroundHeight={824}
+		level={DEBUG_LEVEL}
 	/>
 {/if}

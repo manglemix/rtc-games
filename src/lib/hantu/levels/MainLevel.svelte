@@ -1,8 +1,11 @@
 <script lang="ts">
 	import { getContext, onDestroy, onMount } from 'svelte';
 	import { State, type GameState } from '../game-state.svelte';
-	import { Vector2 } from '$lib';
+	import { Vector2 } from '$lib/index.svelte';
 	import { Image as ImageObj } from "image-js";
+	import Timer from '../ui/Timer.svelte';
+	import type { Level } from './level.svelte';
+	import Player from '../ui/Player.svelte';
 
 	let bgWidth = $state(0);
 	let bgHeight = $state(0);
@@ -11,16 +14,12 @@
 	let bgScale = $state(0);
 	let processInterval = 0;
 	let {
-		backgroundUrl,
-		backgroundWidth,
-		backgroundHeight
-	}: { backgroundUrl: string; backgroundWidth: number; backgroundHeight: number } = $props();
+		level
+	}: { level: Level } = $props();
 
 	const VISIBLE_RADIUS = 100;
 	const gameState: GameState = getContext('gameState');
-	const player = gameState.player;
-	let playerX = $state(player.origin.x);
-	let playerY = $state(player.origin.y);
+	const thisPlayer = gameState.getThisPlayer();
 	let movementVector = new Vector2(0, 0);
 
 	function keyDown(event: KeyboardEvent) {
@@ -50,7 +49,7 @@
 				movementVector.x = 1;
 				break;
 		}
-		player.velocity = movementVector.normalize().mul(20);
+		thisPlayer.velocity = movementVector.normalize().mul(20);
 
 		if (event.code !== 'Tab') {
 			// Consume the event so it doesn't get handled twice,
@@ -82,7 +81,7 @@
 				movementVector.x = 0;
 				break;
 		}
-		player.velocity = movementVector.normalize().mul(20);
+		thisPlayer.velocity = movementVector.normalize().mul(20);
 	}
 
 	onMount(async () => {
@@ -91,17 +90,18 @@
 			windowHeight = window.innerHeight;
 			const maxDimension = Math.max(windowWidth, windowHeight);
 			bgScale = maxDimension / VISIBLE_RADIUS;
-			bgWidth = backgroundWidth * bgScale;
-			bgHeight = backgroundHeight * bgScale;
+			bgWidth = level.width * bgScale;
+			bgHeight = level.height * bgScale;
 		};
 		window.onresize = onResize;
 		onResize();
-		player.collisionMask = await ImageObj.load('/hantu/among-us-map-979738868-collision.png');
+		thisPlayer.collisionMask = await ImageObj.load(level.collisionMaskUrl);
 
 		processInterval = setInterval(() => {
-			player.process(0.016);
-			playerX = player.origin.x;
-			playerY = player.origin.y;
+			thisPlayer.process(0.016);
+			for (const player of gameState.players.values()) {
+				player.process(0.016);
+			}
 		}, 16);
 
 		window.addEventListener('keydown', keyDown, true);
@@ -113,27 +113,50 @@
 		window.removeEventListener('keydown', keyDown, true);
 		window.removeEventListener('keyup', keyUp, true);
 	});
+
+	$inspect(gameState.state);
 </script>
 
 <img
-	src={backgroundUrl}
+	src={level.backgroundUrl}
 	alt="Background"
 	id="background"
 	style="--width: {bgWidth}px;
         --height: {bgHeight}px;
-        --left: {-playerX * bgScale + windowWidth / 2}px;
-        --top: {-playerY * bgScale + windowHeight / 2}px"
+        --left: {-thisPlayer.origin.x * bgScale + windowWidth / 2}px;
+        --top: {-thisPlayer.origin.y * bgScale + windowHeight / 2}px"
 />
 
-<img
-	src="/hantu/tzsbmui4vdq51-221852797.png"
-	alt="Player"
-	class="player"
-	style="--width: {23.00 * bgScale / 2}px;
-        --height: {29.64 * bgScale / 2}px;
-        --left: {windowWidth / 2 - bgScale * 23.00 / 2 / 2}px;
-        --top: {windowHeight / 2 - bgScale * 29.64 / 2 / 2}px"
+<Player
+	bgScale={bgScale}
+	windowWidth={windowWidth}
+	windowHeight={windowHeight}
+	playerObj={thisPlayer}
+	thisPlayerObj={thisPlayer}
 />
+{#each gameState.players as [name, player]}
+	<Player
+		bgScale={bgScale}
+		windowWidth={windowWidth}
+		windowHeight={windowHeight}
+		playerObj={player}
+		thisPlayerObj={thisPlayer}
+	/>
+{/each}
+
+<div class="flex flex-col w-screen h-screen justify-between">
+	<div></div>
+
+	{#if gameState.state === State.KeyProposition}
+		<Timer duration={30} />
+	{:else if gameState.state === State.KeyVote}
+		<Timer duration={50} />
+	{:else if gameState.state === State.Day}
+		<Timer duration={120} />
+	{:else if gameState.state === State.Night}
+		<Timer duration={100} />
+	{/if}
+</div>
 
 <style>
 	#background {
@@ -146,16 +169,6 @@
 		overflow: hidden;
 		image-rendering: pixelated;
 		image-rendering: -moz-crisp-edges;
-	}
-	.player {
-		position: fixed;
-		max-width: none;
-		width: var(--width);
-		height: var(--height);
-		top: var(--top);
-		left: var(--left);
-		overflow: hidden;
-		image-rendering: pixelated;
-		image-rendering: -moz-crisp-edges;
+		z-index: -2;
 	}
 </style>

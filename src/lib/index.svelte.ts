@@ -65,10 +65,15 @@ export function splitmix32(seed: number) {
 }
 
 export class Vector2 {
+	public x = $state(0);
+	public y = $state(0);
 	constructor(
-		public x: number,
-		public y: number
-	) {}
+		x: number,
+		y: number,
+	) {
+		this.x = x;
+		this.y = y;
+	}
 
 	public add(other: Vector2) {
 		return new Vector2(this.x + other.x, this.y + other.y);
@@ -115,5 +120,29 @@ export class Vector2 {
 
 	public round() {
 		return new Vector2(Math.round(this.x), Math.round(this.y));
+	}
+
+	public floor() {
+		return new Vector2(Math.floor(this.x), Math.floor(this.y));
+	}
+
+	public ceil() {
+		return new Vector2(Math.ceil(this.x), Math.ceil(this.y));
+	}
+
+	public toString() {
+		return `(${this.x}, ${this.y})`;
+	}
+
+	public equals(other: Vector2) {
+		return this.x === other.x && this.y === other.y;
+	}
+
+	public toJSON() {
+		return { x: this.x, y: this.y };
+	}
+
+	public static fromJSON(json: { x: number; y: number }) {
+		return new Vector2(json.x, json.y);
 	}
 }
