@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { getContext } from 'svelte';
-	import type { GameState } from '../game-state.svelte';
+	import type { GameState } from '../logic/game-state.svelte';
 	import Timer from './Timer.svelte';
 
 	const gameState: GameState = getContext('gameState');

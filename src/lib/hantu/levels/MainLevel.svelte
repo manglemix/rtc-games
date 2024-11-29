@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { getContext, onDestroy, onMount } from 'svelte';
-	import { State, type GameState } from '../game-state.svelte';
+	import { State, type GameState } from '../logic/game-state.svelte';
 	import { Vector2 } from '$lib/index.svelte';
 	import Timer from '../ui/Timer.svelte';
 	import Player from '../ui/Player.svelte';
@@ -43,7 +43,7 @@
 				movementVector.x = 1;
 				break;
 		}
-		gameState.thisPlayer.velocity = movementVector.normalize().mul(50);
+		gameState.thisPlayer.velocity = movementVector.normalize().mul(gameState.level.playerSpeed);
 
 		if (event.code !== 'Tab') {
 			// Consume the event so it doesn't get handled twice,
@@ -75,7 +75,7 @@
 				movementVector.x = 0;
 				break;
 		}
-		gameState.thisPlayer.velocity = movementVector.normalize().mul(50);
+		gameState.thisPlayer.velocity = movementVector.normalize().mul(gameState.level.playerSpeed);
 	}
 
 	onMount(async () => {
@@ -89,6 +89,12 @@
 		};
 		window.onresize = onResize;
 		onResize();
+		gameState.thisPlayer.onEnterArea = (areaType) => {
+			console.log('Entered area:', areaType);
+		};
+		gameState.thisPlayer.onExitArea = (areaType) => {
+			console.log('Exited area:', areaType);
+		};
 
 		window.addEventListener('keydown', keyDown, true);
 		window.addEventListener('keyup', keyUp, true);

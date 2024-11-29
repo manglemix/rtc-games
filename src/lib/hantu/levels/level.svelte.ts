@@ -18,10 +18,10 @@ export interface Level {
 	readonly voteRadius: number;
 	readonly visibleRadius: number;
 	readonly cryptOrigin: Vector2;
-	readonly areaTypes: AreaType[];
 	readonly jailOrigins: Vector2[];
 	readonly playerSprites: string[];
 	readonly playerHalfDimensions: Vector2[];
+	readonly playerSpeed: number;
 }
 
 export const DEBUG_LEVEL: Level = {
@@ -33,8 +33,8 @@ export const DEBUG_LEVEL: Level = {
 	voteRadius: 80,
 	visibleRadius: 200,
 	cryptOrigin: new Vector2(900, 400),
-	areaTypes: [],
 	jailOrigins: [],
 	playerSprites: ['/characters/hantu/player01.png'],
-	playerHalfDimensions: [new Vector2(15, 15)]
+	playerHalfDimensions: [new Vector2(15, 15)],
+	playerSpeed: 75
 };

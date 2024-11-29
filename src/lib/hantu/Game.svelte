@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { NetworkClient } from '$lib/rtc-client';
 	import { onDestroy, onMount, setContext } from 'svelte';
-	import { GameState, State } from './game-state.svelte';
+	import { GameState, State } from './logic/game-state.svelte';
 	import FirstInfo from './ui/FirstInfo.svelte';
 	import MainLevel from './levels/MainLevel.svelte';
 	import { DEBUG_LEVEL } from './levels/level.svelte';

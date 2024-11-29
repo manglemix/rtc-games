@@ -1,6 +1,8 @@
+use std::str::FromStr;
+
 use anyhow::Context;
 use fxhash::FxHashMap;
-use image::{save_buffer, ExtendedColorType, ImageBuffer, LumaA, Pixel, RgbaImage};
+use image::{save_buffer, ExtendedColorType, ImageBuffer, Pixel, Rgba, RgbaImage};
 use psd::Psd;
 use rayon::iter::{
     IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
@@ -11,6 +13,36 @@ use serde::Deserialize;
 struct LevelInfo {
     character_half_width: u32,
     character_half_height: u32,
+}
+
+#[derive(Clone, Copy, Debug)]
+#[repr(u8)]
+enum AreaType {
+	DiningArea = 0,
+	Kitchen = 1,
+	Bedroom = 2,
+	Bathroom = 3,
+	Jail = 4,
+	Crypt = 5
+}
+
+impl FromStr for AreaType {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "DiningArea" => Ok(AreaType::DiningArea),
+            "Kitchen" => Ok(AreaType::Kitchen),
+            "Bedroom" => Ok(AreaType::Bedroom),
+            "Bathroom" => Ok(AreaType::Bathroom),
+            "Jail" => Ok(AreaType::Jail),
+            "Crypt" => Ok(AreaType::Crypt),
+            _ => {
+                eprintln!("Unknown area type {:?}", s);
+                Err(())
+            }
+        }
+    }
 }
 
 fn main() -> anyhow::Result<()> {
@@ -118,7 +150,7 @@ fn main() -> anyhow::Result<()> {
             },
             || {
                 let walls_group_id = &psd.group_ids_in_order()[0];
-                let mut layers: Vec<_> = psd.get_group_sub_layers(walls_group_id)
+                let layers: Vec<_> = psd.get_group_sub_layers(walls_group_id)
                     .unwrap()
                     .par_iter()
                     .filter(|layer| !layer.visible())
@@ -126,7 +158,7 @@ fn main() -> anyhow::Result<()> {
                         RgbaImage::from_raw(psd.width(), psd.height(), layer.rgba()).unwrap()
                     })
                     .collect();
-                let mut compiled = ImageBuffer::<LumaA<u8>, _>::new(psd.width(), psd.height());
+                let mut compiled = ImageBuffer::<Rgba<u8>, _>::new(psd.width(), psd.height());
 
                 compiled
                     .par_enumerate_pixels_mut()
@@ -147,7 +179,7 @@ fn main() -> anyhow::Result<()> {
                                     if layer_pixel[3] == 0 {
                                         continue;
                                     }
-                                    *pixel = LumaA([0, 255]);
+                                    *pixel = Rgba([0, 0, 0, 255]);
                                     return;
                                 }
                             }
@@ -160,7 +192,7 @@ fn main() -> anyhow::Result<()> {
                             &compiled,
                             psd.width(),
                             psd.height(),
-                            ExtendedColorType::La8,
+                            ExtendedColorType::Rgba8,
                         ) {
                             Ok(()) => (),
                             Err(err) => eprintln!("Error saving collisions.webp: {}", err),
@@ -169,14 +201,28 @@ fn main() -> anyhow::Result<()> {
                 }
                 let area_group_id = &psd.group_ids_in_order()[1];
 
-                layers = psd.get_group_sub_layers(area_group_id)
+                drop(layers);
+                let fallible_layers: Vec<_> = psd.get_group_sub_layers(area_group_id)
                     .unwrap()
                     .par_iter()
-                    .filter(|layer| layer.visible())
+                    .filter(|layer| !layer.visible())
                     .map(|layer| {
-                        RgbaImage::from_raw(psd.width(), psd.height(), layer.rgba()).unwrap()
+                        Result::<_, ()>::Ok((
+                            AreaType::from_str(layer.name())?,
+                            RgbaImage::from_raw(psd.width(), psd.height(), layer.rgba()).unwrap()
+                        ))
                     })
                     .collect();
+                
+                let mut layers = Vec::with_capacity(fallible_layers.len());
+                for fallible_layer in fallible_layers {
+                    match fallible_layer {
+                        Ok(x) => layers.push(x),
+                        Err(()) => {
+                            return;
+                        },
+                    }
+                }
 
                 if layers.len() > u8::MAX as usize - 1 {
                     eprintln!(
@@ -194,13 +240,13 @@ fn main() -> anyhow::Result<()> {
                         if pixel[1] != 0 {
                             return;
                         }
-                        for (i, layer) in layers.iter().enumerate().rev() {
+                        for (i, (area_type, layer)) in layers.iter().rev().enumerate() {
                             let layer_pixel = layer.get_pixel(x, y);
                             if layer_pixel[3] == 0 {
                                 continue;
                             }
                             let i = i as u8 + 1;
-                            *pixel = LumaA([i, 255]);
+                            *pixel = Rgba([i, *area_type as u8, 0, 255]);
                             break;
                         }
                     });

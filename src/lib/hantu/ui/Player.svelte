@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Vector2 } from '$lib/index.svelte';
-	import { State, type GameState, type Player } from '../game-state.svelte';
+	import { State, type GameState } from '../logic/game-state.svelte';
+	import type { Player } from '../logic/player.svelte';
 
 	let {
 		bgScale,

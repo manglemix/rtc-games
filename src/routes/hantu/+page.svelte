@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Background from '$lib/hantu/Background.svelte';
-	import { DATA_CHANNELS, type GameStateMessage } from '$lib/hantu/game-state.svelte';
+	import { DATA_CHANNELS, type GameStateMessage } from '$lib/hantu/logic/game-state.svelte';
 	import Game from '$lib/hantu/Game.svelte';
 	import { createRoomCode, NetworkClient } from '$lib/rtc-client';
 	import {
