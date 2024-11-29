@@ -31,11 +31,15 @@
 
 	const delta = $derived(playerObj.origin.sub(cameraOrigin));
 	const style = $derived.by(() => {
-		return `--width: ${PLAYER_WIDTH * bgScale}px;` +
+		return (
+			`--width: ${PLAYER_WIDTH * bgScale}px;` +
 			`--height: ${PLAYER_HEIGHT * bgScale}px;` +
 			`--left: ${windowWidth / 2 - bgScale * (PLAYER_WIDTH / 2 - delta.x)}px;` +
 			`--top: ${windowHeight / 2 - bgScale * (PLAYER_HEIGHT / 2 - delta.y)}px;` +
-			(gameState.proposals.has(playerObj.name) ? 'filter: saturate(90%) brightness(80%) hue-rotate(90deg);' : '');
+			(gameState.proposals.has(playerObj.name)
+				? 'filter: saturate(90%) brightness(80%) hue-rotate(90deg);'
+				: '')
+		);
 	});
 </script>
 
@@ -44,12 +48,7 @@
 		<img src="/hantu/tzsbmui4vdq51-221852797.png" alt="Player" />
 	</button>
 {:else}
-	<img
-		src="/hantu/tzsbmui4vdq51-221852797.png"
-		alt="Player"
-		class="player"
-		{style}
-	/>
+	<img src="/hantu/tzsbmui4vdq51-221852797.png" alt="Player" class="player" {style} />
 {/if}
 
 <style>
@@ -73,7 +72,8 @@
 		cursor: pointer;
 		filter: saturate(80%) brightness(70%);
 	}
-	img, button {
+	img,
+	button {
 		-webkit-user-drag: none;
 		user-select: none;
 		-moz-user-select: none;

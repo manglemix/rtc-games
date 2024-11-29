@@ -1,4 +1,4 @@
-import { sfc32StrSeeded, Vector2 } from '$lib/index.svelte';
+import { sfc32, sfc32StrSeeded, shuffle, Vector2 } from '$lib/index.svelte';
 import type { DataChannelInit, NetworkClient } from '$lib/rtc-client';
 import { Image as ImageObj } from 'image-js';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
@@ -67,7 +67,7 @@ export abstract class GameState {
 	}
 
 	public get proposer(): Player {
-		return this.getNetworkOrderedPlayers()[this.proposerIndex];
+		return this.getVoteOrderedPlayers()[this.proposerIndex];
 	}
 
 	public proposals: SvelteSet<string> = $state(new SvelteSet());
@@ -86,6 +86,7 @@ export abstract class GameState {
 	protected netClient: NetworkClient;
 	protected syncRng: () => number;
 	protected _stateEndTimeMsecs: number = $state(Date.now());
+	protected readonly voteOrderSeed: number[];
 
 	private _state: State = $state(State.FirstInfo);
 	private _proposerIndex = $state(0);
@@ -117,6 +118,12 @@ export abstract class GameState {
 				player._possessed = true;
 			}
 		}
+		this.voteOrderSeed = [
+			this.syncRandInt(0, 0xffffffff),
+			this.syncRandInt(0, 0xffffffff),
+			this.syncRandInt(0, 0xffffffff),
+			this.syncRandInt(0, 0xffffffff)
+		];
 
 		// Propagate player kinematics at 20fps
 		this.propagatePlayerKinematicsInterval = setInterval(() => {
@@ -156,7 +163,7 @@ export abstract class GameState {
 		}, 16);
 
 		$effect(() => {
-			if (this.getNetworkOrderedPlayers()[this.proposerIndex].name === this.thisPlayer.name) {
+			if (this.getVoteOrderedPlayers()[this.proposerIndex].name === this.thisPlayer.name) {
 				this.sendKeyAction({ propose: { names: Array.from(this.proposals) } });
 			}
 		});
@@ -185,6 +192,13 @@ export abstract class GameState {
 		return players;
 	}
 
+	public getVoteOrderedPlayers(): Player[] {
+		const players = this.getNetworkOrderedPlayers().filter((player) => player.alive);
+		const rng = sfc32(this.voteOrderSeed[0], this.voteOrderSeed[1], this.voteOrderSeed[2], this.voteOrderSeed[3]);
+		shuffle(players, rng);
+		return players;
+	}
+
 	public close() {
 		clearInterval(this.propagatePlayerKinematicsInterval);
 		clearInterval(this.processPlayerKinematicsInterval);
@@ -205,9 +219,10 @@ export abstract class GameState {
 				this.proposals.clear();
 
 				let i = 0;
-				for (const player of this.getNetworkOrderedPlayers()) {
+				const voteOrdered = this.getVoteOrderedPlayers();
+				for (const player of voteOrdered) {
 					player.origin = this.level.voteOrigin.add(
-						new Vector2(this.level.voteRadius, 0).rotate((i * 2 * Math.PI) / this.players.size)
+						new Vector2(this.level.voteRadius, 0).rotate((i * 2 * Math.PI) / voteOrdered.length)
 					);
 					i++;
 				}
@@ -217,7 +232,7 @@ export abstract class GameState {
 				for (const player of this.players.values()) {
 					player._currentVote = undefined;
 				}
-				break; 
+				break;
 			case State.Day:
 				this.proposals.clear();
 				break;
@@ -339,7 +354,7 @@ class HostGameState extends GameState {
 					return;
 				}
 				for (const player of this.players.values()) {
-					if (player._currentVote === undefined) {
+					if (player.alive && player._currentVote === undefined) {
 						return;
 					}
 				}
@@ -373,7 +388,7 @@ class HostGameState extends GameState {
 				while (true) {
 					this.setState(State.KeyProposition);
 					await wait();
-					if (this.proposerIndex == this.players.size - 1) {
+					if (this.proposerIndex == this.getVoteOrderedPlayers().length - 1) {
 						this.setState(State.ForcedKeyVoteResults);
 						await wait();
 						break;
@@ -384,11 +399,11 @@ class HostGameState extends GameState {
 						await wait();
 						let yays = 0;
 						for (const player of this.players.values()) {
-							if (player.currentVote) {
+							if (player.alive && player.currentVote) {
 								yays++;
 							}
 						}
-						if (yays > this.players.size / 2) {
+						if (yays > this.getVoteOrderedPlayers().length / 2) {
 							break;
 						}
 					}
@@ -411,7 +426,7 @@ class HostGameState extends GameState {
 					this.skipTimer();
 				}
 			}
-		})
+		});
 	}
 
 	public finalizeProposals(): void {

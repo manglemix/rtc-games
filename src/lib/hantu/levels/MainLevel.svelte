@@ -126,14 +126,7 @@
 />
 
 {#each gameState.players as [_name, player]}
-	<Player
-		{bgScale}
-		{windowWidth}
-		{windowHeight}
-		playerObj={player}
-		{gameState}
-		{cameraOrigin}
-	/>
+	<Player {bgScale} {windowWidth} {windowHeight} playerObj={player} {gameState} {cameraOrigin} />
 {/each}
 
 {#if gameState.state === State.KeyProposition && gameState.proposals.size === gameState.requiredProposals && gameState.proposer.name === gameState.thisPlayer.name}
@@ -182,7 +175,8 @@
 		image-rendering: -moz-crisp-edges;
 		z-index: -2;
 	}
-	img, button {
+	img,
+	button {
 		-webkit-user-drag: none;
 		user-select: none;
 		-moz-user-select: none;

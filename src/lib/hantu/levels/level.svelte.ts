@@ -7,7 +7,7 @@ export interface Level {
 	readonly height: number;
 	readonly voteOrigin: Vector2;
 	readonly voteRadius: number;
-    readonly visibleRadius: number;
+	readonly visibleRadius: number;
 }
 
 export const DEBUG_LEVEL: Level = {
@@ -17,5 +17,5 @@ export const DEBUG_LEVEL: Level = {
 	height: 824,
 	voteOrigin: new Vector2(400, 200),
 	voteRadius: 20,
-    visibleRadius: 200
+	visibleRadius: 200
 };
