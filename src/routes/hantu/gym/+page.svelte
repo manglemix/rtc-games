@@ -4,13 +4,9 @@
 	import Game from '$lib/hantu/Game.svelte';
 	import { createRoomCode, NetworkClient } from '$lib/rtc-client';
 
-	let netClient: NetworkClient = NetworkClient.createRoom(
-		'host',
-		DATA_CHANNELS,
-		() => {}
-	);
+	let netClient: NetworkClient = NetworkClient.createRoom('host', DATA_CHANNELS, () => {});
 	let roomCode = createRoomCode();
 </script>
 
 <Background />
-<Game netClient={netClient} {roomCode} />
+<Game {netClient} {roomCode} />

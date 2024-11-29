@@ -1,32 +1,40 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 
-	let { duration, id }: { duration: number, id?: string } = $props();
+	let { endTimeMsecs }: { endTimeMsecs: number } = $props();
 
-	let timerInterval = 0;
+	let timerInterval: number = 0;
 	let percentage = $state(100);
-	const startTime = Date.now();
-	const endTime = startTime + duration * 1000;
 
 	onMount(() => {
+		const durationMsecs = $derived(endTimeMsecs - Date.now());
+
 		timerInterval = setInterval(() => {
 			const now = Date.now();
-			if (now < endTime) {
-				const timeLeft = endTime - now;
-				percentage = timeLeft / duration / 10;
+			if (now < endTimeMsecs) {
+				const timeLeft = endTimeMsecs - now;
+				percentage = (timeLeft / durationMsecs) * 100;
 			} else {
-				clearInterval(timerInterval);
 				percentage = 0;
 			}
 		}, 16);
 	});
+
+	onDestroy(() => {
+		clearInterval(timerInterval);
+	});
 </script>
 
-<progress class="w-full" value={percentage} max="100" {id}></progress>
+<progress class="w-full" value={percentage} max="100"></progress>
 
 <style>
 	progress {
 		position: fixed;
 		bottom: 0;
+		-webkit-user-drag: none;
+		user-select: none;
+		-moz-user-select: none;
+		-webkit-user-select: none;
+		-ms-user-select: none;
 	}
 </style>

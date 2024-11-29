@@ -2,11 +2,8 @@
 	import { getContext, onDestroy, onMount } from 'svelte';
 	import { State, type GameState } from '../game-state.svelte';
 	import { Vector2 } from '$lib/index.svelte';
-	import { Image as ImageObj } from "image-js";
 	import Timer from '../ui/Timer.svelte';
-	import type { Level } from './level.svelte';
 	import Player from '../ui/Player.svelte';
-	import { SvelteSet } from 'svelte/reactivity';
 
 	let bgWidth = $state(0);
 	let bgHeight = $state(0);
@@ -14,13 +11,10 @@
 	let windowHeight = $state(0);
 	let bgScale = $state(0);
 	let processInterval = 0;
-	let {
-		level
-	}: { level: Level } = $props();
 
-	const VISIBLE_RADIUS = 100;
 	const gameState: GameState = getContext('gameState');
 	let movementVector = new Vector2(0, 0);
+	let cameraOrigin = $state(gameState.thisPlayer.origin);
 
 	function keyDown(event: KeyboardEvent) {
 		if (event.defaultPrevented) {
@@ -49,7 +43,7 @@
 				movementVector.x = 1;
 				break;
 		}
-		gameState.thisPlayer.velocity = movementVector.normalize().mul(20);
+		gameState.thisPlayer.velocity = movementVector.normalize().mul(50);
 
 		if (event.code !== 'Tab') {
 			// Consume the event so it doesn't get handled twice,
@@ -81,7 +75,7 @@
 				movementVector.x = 0;
 				break;
 		}
-		gameState.thisPlayer.velocity = movementVector.normalize().mul(20);
+		gameState.thisPlayer.velocity = movementVector.normalize().mul(50);
 	}
 
 	onMount(async () => {
@@ -89,9 +83,9 @@
 			windowWidth = window.innerWidth;
 			windowHeight = window.innerHeight;
 			const maxDimension = Math.max(windowWidth, windowHeight);
-			bgScale = maxDimension / VISIBLE_RADIUS;
-			bgWidth = level.width * bgScale;
-			bgHeight = level.height * bgScale;
+			bgScale = maxDimension / gameState.level.visibleRadius;
+			bgWidth = gameState.level.width * bgScale;
+			bgHeight = gameState.level.height * bgScale;
 		};
 		window.onresize = onResize;
 		onResize();
@@ -107,56 +101,73 @@
 	});
 
 	$inspect(gameState.state);
+	$effect(() => {
+		if (
+			gameState.state === State.KeyProposition ||
+			gameState.state === State.KeyVote ||
+			gameState.state === State.KeyVoteResults ||
+			gameState.state === State.ForcedKeyVoteResults
+		) {
+			cameraOrigin = gameState.level.voteOrigin;
+		} else {
+			cameraOrigin = gameState.thisPlayer.origin;
+		}
+	});
 </script>
 
 <img
-	src={level.backgroundUrl}
+	src={gameState.level.backgroundUrl}
 	alt="Background"
 	id="background"
 	style="--width: {bgWidth}px;
         --height: {bgHeight}px;
-        --left: {-gameState.thisPlayer.origin.x * bgScale + windowWidth / 2}px;
-        --top: {-gameState.thisPlayer.origin.y * bgScale + windowHeight / 2}px"
+        --left: {-cameraOrigin.x * bgScale + windowWidth / 2}px;
+        --top: {-cameraOrigin.y * bgScale + windowHeight / 2}px"
 />
 
-{#each gameState.players as [name, player]}
+{#each gameState.players as [_name, player]}
 	<Player
-		bgScale={bgScale}
-		windowWidth={windowWidth}
-		windowHeight={windowHeight}
+		{bgScale}
+		{windowWidth}
+		{windowHeight}
 		playerObj={player}
 		{gameState}
-		onPropose={() => {
-			if (!gameState.proposals.delete(name)) {
-				if (gameState.proposals.size < gameState.requiredProposals) {
-					gameState.proposals.add(name);
-				}
-			}
-		}}
-		highlightGreen={gameState.proposals.has(name)}
-		cameraOrigin={gameState.thisPlayer.origin}
+		{cameraOrigin}
 	/>
 {/each}
 
-{#if gameState.state === State.KeyProposition && gameState.proposals.size === gameState.requiredProposals}
-	<div class="flex flex-row justify-center w-screen fixed bottom-4">
-		<button onclick={() => {
-			gameState.finalizeProposals();
-		}}>
-			Finish
+{#if gameState.state === State.KeyProposition && gameState.proposals.size === gameState.requiredProposals && gameState.proposer.name === gameState.thisPlayer.name}
+	<div class="fixed bottom-4 flex w-screen flex-row justify-center">
+		<button
+			onclick={() => {
+				gameState.finalizeProposals();
+			}}
+		>
+			Finish Proposal
 		</button>
 	</div>
 {/if}
 
-{#if gameState.state === State.KeyProposition}
-	<Timer duration={30} />
-{:else if gameState.state === State.KeyVote}
-	<Timer duration={50} />
-{:else if gameState.state === State.Day}
-	<Timer duration={120} />
-{:else if gameState.state === State.Night}
-	<Timer duration={100} />
+{#if gameState.state === State.KeyVote && gameState.thisPlayer.currentVote === undefined}
+	<div class="fixed bottom-4 flex w-screen flex-row justify-center gap-4">
+		<button
+			onclick={() => {
+				gameState.thisPlayer.setVote(true);
+			}}
+		>
+			Yes
+		</button>
+		<button
+			onclick={() => {
+				gameState.thisPlayer.setVote(false);
+			}}
+		>
+			No
+		</button>
+	</div>
 {/if}
+
+<Timer endTimeMsecs={gameState.stateEndTimeMsecs} />
 
 <style>
 	#background {
@@ -170,5 +181,12 @@
 		image-rendering: pixelated;
 		image-rendering: -moz-crisp-edges;
 		z-index: -2;
+	}
+	img, button {
+		-webkit-user-drag: none;
+		user-select: none;
+		-moz-user-select: none;
+		-webkit-user-select: none;
+		-ms-user-select: none;
 	}
 </style>

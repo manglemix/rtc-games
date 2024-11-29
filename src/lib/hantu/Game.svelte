@@ -6,28 +6,24 @@
 	import MainLevel from './levels/MainLevel.svelte';
 	import { DEBUG_LEVEL } from './levels/level.svelte';
 
-	let {
-		netClient,
-		roomCode,
-	}: { netClient: NetworkClient; roomCode: string } = $props();
-	let gameState = GameState.create(netClient, roomCode, DEBUG_LEVEL);
-
-	setContext('gameState', gameState);
+	let { netClient, roomCode }: { netClient: NetworkClient; roomCode: string } = $props();
+	let gameState: GameState | null = $state(null);
 
 	onMount(() => {
 		document.documentElement.requestFullscreen();
+		gameState = GameState.create(netClient, roomCode, DEBUG_LEVEL);
+		setContext('gameState', gameState);
 	});
 
 	onDestroy(() => {
-		gameState.close();
-		document.exitFullscreen();
+		gameState?.close();
 	});
 </script>
 
-{#if gameState.state === State.FirstInfo}
-	<FirstInfo />
-{:else}
-	<MainLevel
-		level={DEBUG_LEVEL}
-	/>
+{#if gameState}
+	{#if gameState.state === State.FirstInfo}
+		<FirstInfo />
+	{:else}
+		<MainLevel />
+	{/if}
 {/if}

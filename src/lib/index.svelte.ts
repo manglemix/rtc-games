@@ -67,10 +67,7 @@ export function splitmix32(seed: number) {
 export class Vector2 {
 	public x = $state(0);
 	public y = $state(0);
-	constructor(
-		x: number,
-		y: number,
-	) {
+	constructor(x: number, y: number) {
 		this.x = x;
 		this.y = y;
 	}
@@ -130,6 +127,12 @@ export class Vector2 {
 		return new Vector2(Math.ceil(this.x), Math.ceil(this.y));
 	}
 
+	public rotate(angle: number) {
+		const cos = Math.cos(angle);
+		const sin = Math.sin(angle);
+		return new Vector2(this.x * cos - this.y * sin, this.x * sin + this.y * cos);
+	}
+
 	public toString() {
 		return `(${this.x}, ${this.y})`;
 	}
@@ -144,5 +147,21 @@ export class Vector2 {
 
 	public static fromJSON(json: { x: number; y: number }) {
 		return new Vector2(json.x, json.y);
+	}
+}
+
+export function shuffle(array: any[], rng = Math.random) {
+	let currentIndex = array.length;
+  
+	// While there remain elements to shuffle...
+	while (currentIndex != 0) {
+
+		// Pick a remaining element...
+		let randomIndex = Math.floor(rng() * currentIndex);
+		currentIndex--;
+
+		// And swap it with the current element.
+		[array[currentIndex], array[randomIndex]] = [
+		array[randomIndex], array[currentIndex]];
 	}
 }

@@ -1,3 +1,1 @@
-<div class="bg-black w-screen h-screen fixed" style="z-index: -10">
-
-</div>
+<div class="fixed h-screen w-screen bg-black" style="z-index: -10"></div>
