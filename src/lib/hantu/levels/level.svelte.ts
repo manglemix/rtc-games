@@ -8,6 +8,13 @@ export interface Level {
 	readonly voteOrigin: Vector2;
 	readonly voteRadius: number;
 	readonly visibleRadius: number;
+	readonly bedroomMaskUrls: string[];
+	readonly kitchenMaskUrl: string;
+	readonly diningRoomMaskUrl: string;
+	readonly cryptMaskUrl: string;
+	readonly cryptOrigin: Vector2;
+	readonly bathroomMaskUrls: string[];
+	readonly jailMaskUrl: string;
 }
 
 export const DEBUG_LEVEL: Level = {

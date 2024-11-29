@@ -1,0 +1,4 @@
+[tasks.layerizer]
+workspace = false
+command = "cargo"
+args = ["run", "--release", "--manifest-path", "layerizer/Cargo.toml"]
