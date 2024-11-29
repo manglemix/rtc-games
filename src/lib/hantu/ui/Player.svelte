@@ -2,9 +2,6 @@
 	import type { Vector2 } from '$lib/index.svelte';
 	import { State, type GameState, type Player } from '../game-state.svelte';
 
-	const PLAYER_WIDTH = 11.5 * 1.7;
-	const PLAYER_HEIGHT = 14.82 * 1.7;
-
 	let {
 		bgScale,
 		windowWidth,
@@ -20,6 +17,8 @@
 		gameState: GameState;
 		cameraOrigin: Vector2;
 	} = $props();
+	const PLAYER_HALF_WIDTH = playerObj.spriteHalfDimensions.x;
+	const PLAYER_HALF_HEIGHT = playerObj.spriteHalfDimensions.y;
 
 	async function onPropose() {
 		if (!gameState.proposals.delete(playerObj.name)) {
@@ -32,10 +31,10 @@
 	const delta = $derived(playerObj.origin.sub(cameraOrigin));
 	const style = $derived.by(() => {
 		return (
-			`--width: ${PLAYER_WIDTH * bgScale}px;` +
-			`--height: ${PLAYER_HEIGHT * bgScale}px;` +
-			`--left: ${windowWidth / 2 - bgScale * (PLAYER_WIDTH / 2 - delta.x)}px;` +
-			`--top: ${windowHeight / 2 - bgScale * (PLAYER_HEIGHT / 2 - delta.y)}px;` +
+			`--width: ${PLAYER_HALF_WIDTH * 2 * bgScale}px;` +
+			`--height: ${PLAYER_HALF_HEIGHT * 2 * bgScale}px;` +
+			`--left: ${windowWidth / 2 - bgScale * (PLAYER_HALF_WIDTH - delta.x)}px;` +
+			`--top: ${windowHeight / 2 - bgScale * (PLAYER_HALF_HEIGHT - delta.y)}px;` +
 			(gameState.proposals.has(playerObj.name)
 				? 'filter: saturate(90%) brightness(80%) hue-rotate(90deg);'
 				: '')
@@ -45,10 +44,10 @@
 
 {#if gameState.state === State.KeyProposition && gameState.proposer.name === gameState.thisPlayer.name}
 	<button class="player hoverable" onclick={onPropose} type="button" {style}>
-		<img src="/hantu/tzsbmui4vdq51-221852797.png" alt="Player" />
+		<img src={playerObj.spriteUrl} alt="Player" />
 	</button>
 {:else}
-	<img src="/hantu/tzsbmui4vdq51-221852797.png" alt="Player" class="player" {style} />
+	<img src={playerObj.spriteUrl} alt="Player" class="player" {style} />
 {/if}
 
 <style>
@@ -79,5 +78,9 @@
 		-moz-user-select: none;
 		-webkit-user-select: none;
 		-ms-user-select: none;
+	}
+	button img {
+		width: 100%;
+		height: 100%;
 	}
 </style>

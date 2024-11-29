@@ -5,6 +5,7 @@
 	import FirstInfo from './ui/FirstInfo.svelte';
 	import MainLevel from './levels/MainLevel.svelte';
 	import { DEBUG_LEVEL } from './levels/level.svelte';
+	import Background from './Background.svelte';
 
 	let { netClient, roomCode }: { netClient: NetworkClient; roomCode: string } = $props();
 	let gameState: GameState | null = $state(null);
@@ -22,6 +23,7 @@
 
 {#if gameState}
 	{#if gameState.state === State.FirstInfo}
+		<Background />
 		<FirstInfo />
 	{:else}
 		<MainLevel />

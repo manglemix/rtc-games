@@ -1,5 +1,4 @@
 <script lang="ts">
-	import Background from '$lib/hantu/Background.svelte';
 	import { DATA_CHANNELS } from '$lib/hantu/game-state.svelte';
 	import Game from '$lib/hantu/Game.svelte';
 	import { createRoomCode, NetworkClient } from '$lib/rtc-client';
@@ -8,5 +7,4 @@
 	let roomCode = createRoomCode();
 </script>
 
-<Background />
 <Game {netClient} {roomCode} />

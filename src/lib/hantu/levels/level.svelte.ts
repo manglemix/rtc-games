@@ -1,5 +1,14 @@
 import { Vector2 } from '$lib/index.svelte';
 
+export enum AreaType {
+	DiningArea,
+	Kitchen,
+	Bedroom,
+	Bathroom,
+	Jail,
+	Crypt
+}
+
 export interface Level {
 	readonly backgroundUrl: string;
 	readonly collisionMaskUrl: string;
@@ -8,21 +17,24 @@ export interface Level {
 	readonly voteOrigin: Vector2;
 	readonly voteRadius: number;
 	readonly visibleRadius: number;
-	readonly bedroomMaskUrls: string[];
-	readonly kitchenMaskUrl: string;
-	readonly diningRoomMaskUrl: string;
-	readonly cryptMaskUrl: string;
 	readonly cryptOrigin: Vector2;
-	readonly bathroomMaskUrls: string[];
-	readonly jailMaskUrl: string;
+	readonly areaTypes: AreaType[];
+	readonly jailOrigins: Vector2[];
+	readonly playerSprites: string[];
+	readonly playerHalfDimensions: Vector2[];
 }
 
 export const DEBUG_LEVEL: Level = {
-	backgroundUrl: '/hantu/among-us-map-979738868.jpg',
-	collisionMaskUrl: '/hantu/among-us-map-979738868-collision.png',
-	width: 1418,
-	height: 824,
-	voteOrigin: new Vector2(400, 200),
-	voteRadius: 20,
-	visibleRadius: 200
+	backgroundUrl: '/levels/hantu01/background.webp',
+	collisionMaskUrl: '/levels/hantu01/collisions.webp',
+	width: 1000,
+	height: 1000,
+	voteOrigin: new Vector2(500, 435),
+	voteRadius: 80,
+	visibleRadius: 200,
+	cryptOrigin: new Vector2(900, 400),
+	areaTypes: [],
+	jailOrigins: [],
+	playerSprites: ['/characters/hantu/player01.png'],
+	playerHalfDimensions: [new Vector2(15, 15)]
 };

@@ -3,7 +3,7 @@ use fxhash::FxHashMap;
 use image::{save_buffer, ExtendedColorType, ImageBuffer, LumaA, Pixel, RgbaImage};
 use psd::Psd;
 use rayon::iter::{
-    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+    IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
 use serde::Deserialize;
 
@@ -70,22 +70,23 @@ fn main() -> anyhow::Result<()> {
 
         rayon::join(
             || {
-                let mut layers = vec![];
-                psd.get_group_sub_layers(background_group_id)
+                let layers: Vec<_> = psd.get_group_sub_layers(background_group_id)
                     .unwrap()
                     .par_iter()
+                    // There is a bug where the visibility is inverted
+                    .filter(|layer| !layer.visible())
                     .map(|layer| {
                         RgbaImage::from_raw(psd.width(), psd.height(), layer.rgba()).unwrap()
                     })
-                    .collect_into_vec(&mut layers);
+                    .collect();
                 let mut compiled = RgbaImage::new(psd.width(), psd.height());
 
                 compiled
                     .par_enumerate_pixels_mut()
                     .for_each(|(x, y, pixel)| {
                         let mut layer_iter = layers.iter();
-                        let Some(px) = layer_iter.next() else { return; };
-                        *pixel = *px.get_pixel(x, y);
+                        let Some(layer) = layer_iter.next() else { return; };
+                        *pixel = *layer.get_pixel(x, y);
                         if pixel[3] == 255 {
                             return;
                         }
@@ -117,14 +118,14 @@ fn main() -> anyhow::Result<()> {
             },
             || {
                 let walls_group_id = &psd.group_ids_in_order()[0];
-                let mut layers = vec![];
-                psd.get_group_sub_layers(walls_group_id)
+                let mut layers: Vec<_> = psd.get_group_sub_layers(walls_group_id)
                     .unwrap()
                     .par_iter()
+                    .filter(|layer| !layer.visible())
                     .map(|layer| {
                         RgbaImage::from_raw(psd.width(), psd.height(), layer.rgba()).unwrap()
                     })
-                    .collect_into_vec(&mut layers);
+                    .collect();
                 let mut compiled = ImageBuffer::<LumaA<u8>, _>::new(psd.width(), psd.height());
 
                 compiled
@@ -168,13 +169,14 @@ fn main() -> anyhow::Result<()> {
                 }
                 let area_group_id = &psd.group_ids_in_order()[1];
 
-                psd.get_group_sub_layers(area_group_id)
+                layers = psd.get_group_sub_layers(area_group_id)
                     .unwrap()
                     .par_iter()
+                    .filter(|layer| layer.visible())
                     .map(|layer| {
                         RgbaImage::from_raw(psd.width(), psd.height(), layer.rgba()).unwrap()
                     })
-                    .collect_into_vec(&mut layers);
+                    .collect();
 
                 if layers.len() > u8::MAX as usize - 1 {
                     eprintln!(

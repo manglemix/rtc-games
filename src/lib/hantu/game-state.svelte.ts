@@ -102,10 +102,26 @@ export abstract class GameState {
 		this.netClient = netClient;
 
 		for (const peerName of netClient.getPeerNames()) {
-			this.players.set(peerName, new Player(peerName));
+			const i = this.syncRandInt(0, level.playerSprites.length - 1);
+			this.players.set(
+				peerName,
+				new Player(
+					peerName,
+					level.playerSprites[i],
+					level.playerHalfDimensions[i]
+				)
+			);
 		}
-		this.thisPlayer = new ThisPlayer(level.collisionMaskUrl, netClient.name);
-		this.players.set(netClient.name, this.thisPlayer);
+		{
+			const i = this.syncRandInt(0, level.playerSprites.length - 1);
+			this.thisPlayer = new ThisPlayer(
+				level.collisionMaskUrl,
+				netClient.name,
+				level.playerSprites[i],
+				level.playerHalfDimensions[i]
+			);
+			this.players.set(netClient.name, this.thisPlayer);
+		}
 
 		{
 			const possessedCount = Math.max(Math.round(POSSESSED_RATIO * this.players.size), 1);
@@ -194,7 +210,12 @@ export abstract class GameState {
 
 	public getVoteOrderedPlayers(): Player[] {
 		const players = this.getNetworkOrderedPlayers().filter((player) => player.alive);
-		const rng = sfc32(this.voteOrderSeed[0], this.voteOrderSeed[1], this.voteOrderSeed[2], this.voteOrderSeed[3]);
+		const rng = sfc32(
+			this.voteOrderSeed[0],
+			this.voteOrderSeed[1],
+			this.voteOrderSeed[2],
+			this.voteOrderSeed[3]
+		);
 		shuffle(players, rng);
 		return players;
 	}
@@ -511,6 +532,7 @@ export class Player {
 	protected _velocity: Vector2 = $state(new Vector2(0, 0));
 	protected _origin: Vector2 = $state(new Vector2(200, 260));
 	protected _alive = $state(true);
+
 	_currentVote?: boolean = $state(undefined);
 	_possessed = false;
 	_isKeyHolder: boolean = false;
@@ -547,7 +569,11 @@ export class Player {
 		this._velocity = newVelocity;
 	}
 
-	constructor(public readonly name: string) {}
+	constructor(
+		public readonly name: string,
+		public readonly spriteUrl: string,
+		public readonly spriteHalfDimensions: Vector2,
+	) {}
 
 	process(delta: number) {
 		this.origin = this.origin.add(this.velocity.mul(delta));
@@ -557,8 +583,8 @@ export class Player {
 export class ThisPlayer extends Player {
 	private collisionMask?: ImageObj;
 
-	constructor(collisionMaskUrl: string, name: string) {
-		super(name);
+	constructor(collisionMaskUrl: string, name: string, spriteUrl: string, spriteHalfDimensions: Vector2) {
+		super(name, spriteUrl, spriteHalfDimensions);
 		ImageObj.load(collisionMaskUrl).then((img) => {
 			this.collisionMask = img;
 		});
@@ -583,7 +609,11 @@ export class ThisPlayer extends Player {
 					toCheck.x += stepAbs.x * sign.x;
 					stepAbs.x = 0;
 				}
-				if (this.collisionMask.getPixelXY(Math.round(toCheck.x), Math.round(toCheck.y))[0] !== 0) {
+				const px = this.collisionMask.getPixelXY(Math.round(toCheck.x), Math.round(toCheck.y));
+				if (px[3] === 0) {
+					continue;
+				}
+				if (px[0] === 0) {
 					this.velocity.x = 0;
 					toCheck.x = oldToCheckX;
 					break;
@@ -598,7 +628,11 @@ export class ThisPlayer extends Player {
 					toCheck.y += stepAbs.y * sign.y;
 					stepAbs.y = 0;
 				}
-				if (this.collisionMask.getPixelXY(Math.round(toCheck.x), Math.round(toCheck.y))[0] !== 0) {
+				const px = this.collisionMask.getPixelXY(Math.round(toCheck.x), Math.round(toCheck.y));
+				if (px[3] === 0) {
+					continue;
+				}
+				if (px[0] === 0) {
 					this.velocity.y = 0;
 					toCheck.y = oldToCheckY;
 					break;

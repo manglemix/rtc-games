@@ -26,8 +26,8 @@
 	}
 </script>
 
-<Background />
 {#if onMainMenu}
+	<Background />
 	<h1>HANTU</h1>
 	<p>A social deduction game inspired by MindNight, Among Us, and Werewolf</p>
 	<section id="main-menu" class="flex flex-col items-center">
