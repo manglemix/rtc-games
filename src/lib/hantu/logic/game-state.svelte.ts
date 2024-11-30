@@ -20,13 +20,17 @@ export const DATA_CHANNELS: DataChannelInit[] = [
 	},
 	{
 		label: 'player-state'
+	},
+	{
+		label: 'crypt-state'
 	}
 ];
 
 export enum Ending {
-	GreatEnd,
-	GoodEnd,
-	BadEnd
+	Exorcist,
+	Mystery,
+	Satanic,
+	Stygian
 }
 
 export type GameStateMessage = {
@@ -51,6 +55,9 @@ type KinematicsMessage = {
 };
 type PlayerStateMessage = {
 	died?: true;
+};
+type CryptStateMessage = {
+	addProgress?: number;
 };
 
 const POSSESSED_RATIO = 0.3333333;
@@ -81,6 +88,14 @@ export abstract class GameState {
 		return this._proposerIndex;
 	}
 
+	public get cryptProgress(): number {
+		return this._cryptProgress;
+	}
+
+	public get day(): number {
+		return this._day;
+	}
+
 	public get proposer(): Player {
 		return this.getVoteOrderedPlayers()[this.proposerIndex];
 	}
@@ -89,6 +104,7 @@ export abstract class GameState {
 		return this._ending;
 	}
 
+	public goto = goto;
 	public proposals: SvelteSet<string> = $state(new SvelteSet());
 	public readonly thisPlayer: ThisPlayer;
 	public readonly players: Map<string, Player> = new Map<string, Player>();
@@ -106,6 +122,8 @@ export abstract class GameState {
 	protected syncRng: () => number;
 	protected _stateEndTimeMsecs: number = $state(Date.now());
 	protected _ending: Ending | null = $state(null);
+	protected _cryptProgress = $state(0);
+	protected _day = $state(0);
 	protected readonly voteOrderSeed: number[];
 
 	private _state: State = $state(State.FirstInfo);
@@ -212,7 +230,7 @@ export abstract class GameState {
 		};
 		netClient.onHostDisconnect = () => {
 			netClient.close();
-			goto("/hantu");
+			this.goto('/hantu');
 		};
 		this.processPlayerKinematicsInterval = setInterval(() => {
 			if (this.state === State.Day || this.state === State.Night) {
@@ -268,6 +286,11 @@ export abstract class GameState {
 		return players;
 	}
 
+	public addCryptProgress(progress: number): void {
+		this._cryptProgress += progress;
+		this.sendCryptState({ addProgress: progress });
+	}
+
 	public close() {
 		clearInterval(this.propagatePlayerKinematicsInterval);
 		clearInterval(this.processPlayerKinematicsInterval);
@@ -284,6 +307,7 @@ export abstract class GameState {
 					this._proposerIndex = (this._proposerIndex + 1) % this.players.size;
 				} else {
 					this._proposerIndex = 0;
+					this._day++;
 				}
 				this.proposals.clear();
 
@@ -301,9 +325,6 @@ export abstract class GameState {
 				for (const player of this.players.values()) {
 					player._currentVote = undefined;
 				}
-				break;
-			case State.Day:
-				this.proposals.clear();
 				break;
 		}
 		this._state = newState;
@@ -338,6 +359,10 @@ export abstract class GameState {
 
 	protected sendPlayerState(msg: PlayerStateMessage) {
 		this.netClient.send('player-state', JSON.stringify(msg));
+	}
+
+	protected sendCryptState(msg: CryptStateMessage) {
+		this.netClient.send('crypt-state', JSON.stringify(msg));
 	}
 }
 
@@ -421,11 +446,19 @@ export class HostGameState extends GameState {
 				}
 
 				if (possessedCount === 0) {
-					this._ending = Ending.GreatEnd;
+					// Regardless of how it happened, as long as the possessed players are dead, it's a great end
+					this._ending = Ending.Exorcist;
+				} else if (this.cryptProgress < 1) {
+					// Some possessed players are still alive and the crypt is not fixed
+					this._ending = Ending.Satanic;
 				} else if (possessedCount === aliveCount) {
-					this._ending = Ending.BadEnd;
+					// The crypt is fixed, but only possessed players are alive
+					// This happens if all non-possessed players are killed on the night that the crypt is fixed,
+					// or if the non-possessed were voted out on the final vote
+					this._ending = Ending.Stygian;
 				} else {
-					this._ending = Ending.GoodEnd;
+					// The crypt is fixed and at least one non-possessed player is alive
+					this._ending = Ending.Mystery;
 				}
 
 				this.sendGameState({ enterEndResults: { ending: this._ending }, endTimeMsecs });
@@ -500,10 +533,9 @@ export class HostGameState extends GameState {
 							clearTimeout(this.stateTimeoutId);
 						}
 						this.setState(State.EndResults);
-						this._stateEndTimeMsecs = Date.now() + 20000;
 						setTimeout(() => {
 							this.netClient.close();
-							goto("/hantu");
+							this.goto('/hantu');
 						}, 20000);
 					}
 				}
@@ -531,6 +563,11 @@ export class HostGameState extends GameState {
 		// The state machine
 		this.stateTimeoutId = setTimeout(async () => {
 			for (let day = 0; day < 5; day++) {
+				if (this._cryptProgress >= 1) {
+					this.setState(State.FinalVote);
+					await wait();
+					break;
+				}
 				while (true) {
 					this.setState(State.KeyProposition);
 					await wait();
@@ -559,12 +596,11 @@ export class HostGameState extends GameState {
 				this.setState(State.Night);
 				await wait();
 			}
-			this.setState(State.FinalVote);
-			await wait();
 			this.setState(State.EndResults);
 			await wait();
 			this.netClient.close();
-			goto("/hantu");
+			this.goto('/hantu');
+			return;
 		}, 5000);
 	}
 

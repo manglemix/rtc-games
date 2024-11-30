@@ -18,12 +18,15 @@
 	const roomCode = createRoomCode();
 	let botIndex = 0;
 	let bots: NetworkClient[] = $state([]);
-	let netClient: NetworkClient | null =  $state(null); 
+	let netClient: NetworkClient | null = $state(null);
 	let acceptInterval: number | null = null;
 	let onMainMenu = $state(true);
 	let peerNames: SvelteSet<string> = $state(new SvelteSet());
 
 	onMount(() => {
+		if (window.document.fullscreenElement) {
+			document.exitFullscreen();
+		}
 		netClient = NetworkClient.createRoom(
 			name,
 			DATA_CHANNELS,
@@ -86,7 +89,12 @@
 		>
 		<button
 			onclick={async () => {
-				const newNetClient = await defaultConnectToRoom('hantu', roomCode, `bot${botIndex++}`, DATA_CHANNELS);
+				const newNetClient = await defaultConnectToRoom(
+					'hantu',
+					roomCode,
+					`bot${botIndex++}`,
+					DATA_CHANNELS
+				);
 				if (newNetClient === null) {
 					console.error('Failed to connect to room as bot');
 					return;

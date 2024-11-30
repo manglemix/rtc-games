@@ -80,7 +80,8 @@ export class ThisPlayer extends Player {
 		if (this.collisionMask) {
 			let stepAbs = step.abs();
 			const sign = step.sign();
-			const toCheck = this.origin;
+			const toCheck = Vector2.copy(this.origin);
+
 			while (stepAbs.x > 0) {
 				const oldToCheckX = toCheck.x;
 				if (stepAbs.x >= 1) {
@@ -119,19 +120,25 @@ export class ThisPlayer extends Player {
 					break;
 				}
 			}
-			this.origin = toCheck;
 			const px = this.collisionMask.getPixelXY(Math.round(toCheck.x), Math.round(toCheck.y));
 			const newLayer = px[3] === 0 ? 0 : px[0];
+			const newAreaType = px[1] as AreaType;
+
+			if (newAreaType === AreaType.Crypt && !this.isKeyHolder) {
+				return;
+			}
+
 			if (newLayer !== this.currentCollisionLayer) {
 				if (this.currentCollisionLayer !== 0) {
 					this.onExitArea(this.currentAreaType, this.currentCollisionLayer);
 				}
-				this.currentAreaType = px[1] as AreaType;
+				this.currentAreaType = newAreaType;
 				this.currentCollisionLayer = newLayer;
 				if (newLayer !== 0) {
 					this.onEnterArea(this.currentAreaType, newLayer);
 				}
 			}
+			this.origin = toCheck;
 		} else {
 			this.origin = this.origin.add(step);
 		}

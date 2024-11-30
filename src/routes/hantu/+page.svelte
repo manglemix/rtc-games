@@ -11,9 +11,7 @@
 		defaultUploadAnswer
 	} from '$lib/rtc-defaults';
 	import { SvelteSet } from 'svelte/reactivity';
-	import { runBot } from '$lib/hantu/logic/bot.svelte';
-	import { DEBUG_LEVEL } from '$lib/hantu/levels/level.svelte';
-	import { onDestroy } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 
 	let netClient: NetworkClient | null = $state(null);
 	let onMainMenu = $state(true);
@@ -29,6 +27,12 @@
 	function isNameValid() {
 		return name.length > 3 && name.length <= 12 && name.match(/^[a-zA-Z0-9]+$/);
 	}
+
+	onMount(() => {
+		if (window.document.fullscreenElement) {
+			document.exitFullscreen();
+		}
+	});
 
 	onDestroy(() => {
 		if (netClient) {
@@ -99,7 +103,12 @@
 				>
 				<button
 					onclick={async () => {
-						const newNetClient = await defaultConnectToRoom('hantu', roomCode, `bot${botIndex++}`, DATA_CHANNELS);
+						const newNetClient = await defaultConnectToRoom(
+							'hantu',
+							roomCode,
+							`bot${botIndex++}`,
+							DATA_CHANNELS
+						);
 						if (newNetClient === null) {
 							console.error('Failed to connect to room as bot');
 							return;

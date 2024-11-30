@@ -67,9 +67,14 @@ export function splitmix32(seed: number) {
 export class Vector2 {
 	public x = $state(0);
 	public y = $state(0);
-	constructor(x: number, y: number) {
-		this.x = x;
-		this.y = y;
+
+	public constructor(x?: number, y?: number) {
+		this.x = x ?? 0;
+		this.y = y ?? 0;
+	}
+
+	public static copy(other: Vector2) {
+		return new Vector2(other.x, other.y);
 	}
 
 	public add(other: Vector2) {

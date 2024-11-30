@@ -10,7 +10,11 @@
 	import HostCommands from './logic/HostCommands.svelte';
 	import EndResults from './ui/EndResults.svelte';
 
-	let { netClient, roomCode, bots }: { netClient: NetworkClient; roomCode: string, bots?: NetworkClient[] } = $props();
+	let {
+		netClient,
+		roomCode,
+		bots
+	}: { netClient: NetworkClient; roomCode: string; bots?: NetworkClient[] } = $props();
 	let gameState = GameState.create(netClient, roomCode, DEBUG_LEVEL);
 	setContext('gameState', gameState);
 
@@ -28,7 +32,7 @@
 	});
 </script>
 
-{#if gameState.ending}
+{#if gameState.ending !== null}
 	<Background />
 	<EndResults />
 {:else}
