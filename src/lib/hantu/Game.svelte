@@ -6,14 +6,21 @@
 	import MainLevel from './levels/MainLevel.svelte';
 	import { DEBUG_LEVEL } from './levels/level.svelte';
 	import Background from './Background.svelte';
+	import { runBot } from './logic/bot.svelte';
+	import HostCommands from './logic/HostCommands.svelte';
+	import EndResults from './ui/EndResults.svelte';
 
-	let { netClient, roomCode }: { netClient: NetworkClient; roomCode: string } = $props();
-	let gameState: GameState | null = $state(null);
+	let { netClient, roomCode, bots }: { netClient: NetworkClient; roomCode: string, bots?: NetworkClient[] } = $props();
+	let gameState = GameState.create(netClient, roomCode, DEBUG_LEVEL);
+	setContext('gameState', gameState);
 
 	onMount(() => {
 		document.documentElement.requestFullscreen();
-		gameState = GameState.create(netClient, roomCode, DEBUG_LEVEL);
-		setContext('gameState', gameState);
+		if (bots) {
+			bots.forEach((bot) => {
+				runBot(bot, roomCode, DEBUG_LEVEL);
+			});
+		}
 	});
 
 	onDestroy(() => {
@@ -21,11 +28,19 @@
 	});
 </script>
 
-{#if gameState}
-	{#if gameState.state === State.FirstInfo}
-		<Background />
-		<FirstInfo />
-	{:else}
-		<MainLevel />
+{#if gameState.ending}
+	<Background />
+	<EndResults />
+{:else}
+	{#if netClient.isHost}
+		<HostCommands />
+	{/if}
+	{#if gameState}
+		{#if gameState.state === State.FirstInfo}
+			<Background />
+			<FirstInfo />
+		{:else}
+			<MainLevel />
+		{/if}
 	{/if}
 {/if}

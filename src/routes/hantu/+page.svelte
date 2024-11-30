@@ -11,19 +11,33 @@
 		defaultUploadAnswer
 	} from '$lib/rtc-defaults';
 	import { SvelteSet } from 'svelte/reactivity';
+	import { runBot } from '$lib/hantu/logic/bot.svelte';
+	import { DEBUG_LEVEL } from '$lib/hantu/levels/level.svelte';
+	import { onDestroy } from 'svelte';
 
 	let netClient: NetworkClient | null = $state(null);
 	let onMainMenu = $state(true);
+	let botIndex = 0;
+	let bots: NetworkClient[] = $state([]);
 	let name = $state('');
 	let isHost = $state(false);
 	let roomCode = $state('');
 	let joining = $state(false);
-	let acceptInterval: number = 0;
+	let acceptInterval: number | null = null;
 	let peerNames: SvelteSet<string> = $state(new SvelteSet());
 
 	function isNameValid() {
 		return name.length > 3 && name.length <= 12 && name.match(/^[a-zA-Z0-9]+$/);
 	}
+
+	onDestroy(() => {
+		if (netClient) {
+			netClient.close();
+		}
+		if (acceptInterval) {
+			clearInterval(acceptInterval);
+		}
+	});
 </script>
 
 {#if onMainMenu}
@@ -62,7 +76,8 @@
 				<button
 					onclick={() => {
 						defaultClearAdvertise('hantu', roomCode);
-						clearInterval(acceptInterval);
+						clearInterval(acceptInterval!);
+						acceptInterval = null;
 						onMainMenu = false;
 						netClient!.onConnection = (newPeerName) => {
 							console.error('Unexpected connection from', newPeerName);
@@ -78,8 +93,19 @@
 						netClient!.onGuestDisconnect = () => {};
 						netClient!.close();
 						netClient = null;
-						clearInterval(acceptInterval);
+						clearInterval(acceptInterval!);
+						acceptInterval = null;
 					}}>Close Room</button
+				>
+				<button
+					onclick={async () => {
+						const newNetClient = await defaultConnectToRoom('hantu', roomCode, `bot${botIndex++}`, DATA_CHANNELS);
+						if (newNetClient === null) {
+							console.error('Failed to connect to room as bot');
+							return;
+						}
+						bots.push(newNetClient);
+					}}>Add Bot</button
 				>
 			{:else}
 				<button
@@ -157,7 +183,7 @@
 						netClient!.close();
 						netClient = null;
 					};
-					netClient.setOnMessage('game-state', (from, message) => {
+					netClient.setOnMessage('game-state', (_from, message) => {
 						const obj: GameStateMessage = JSON.parse(message.data);
 						if (obj.startGame) {
 							onMainMenu = false;
@@ -169,7 +195,7 @@
 		{/if}
 	</section>
 {:else}
-	<Game netClient={netClient!} {roomCode} />
+	<Game netClient={netClient!} {roomCode} {bots} />
 {/if}
 
 <style>

@@ -3,6 +3,7 @@ import type { DataChannelInit, NetworkClient } from '$lib/rtc-client';
 import { SvelteSet } from 'svelte/reactivity';
 import type { Level } from '../levels/level.svelte';
 import { Player, ThisPlayer } from './player.svelte';
+import { goto } from '$app/navigation';
 
 export const DATA_CHANNELS: DataChannelInit[] = [
 	{
@@ -16,8 +17,17 @@ export const DATA_CHANNELS: DataChannelInit[] = [
 		label: 'player-kinematics',
 		ordered: false,
 		maxRetransmits: 0
+	},
+	{
+		label: 'player-state'
 	}
 ];
+
+export enum Ending {
+	GreatEnd,
+	GoodEnd,
+	BadEnd
+}
 
 export type GameStateMessage = {
 	endTimeMsecs: number;
@@ -28,15 +38,19 @@ export type GameStateMessage = {
 	enterForcedKeyVoteResults?: {};
 	enterDay?: { keyHolders: string[] };
 	enterNight?: {};
-	// setState?: { state: State }
+	enterFinalVote?: {};
+	enterEndResults?: { ending: Ending };
 };
 type KeyActionMessage = {
-	propose?: { names: string[]; final?: boolean };
+	propose?: { names: string[]; final?: true };
 	vote?: { value: boolean };
 };
 type KinematicsMessage = {
 	origin?: { x: number; y: number };
 	velocity?: { x: number; y: number };
+};
+type PlayerStateMessage = {
+	died?: true;
 };
 
 const POSSESSED_RATIO = 0.3333333;
@@ -50,7 +64,8 @@ export enum State {
 	ForcedKeyVoteResults,
 	Day,
 	Night,
-	FinalVote
+	FinalVote,
+	EndResults
 }
 
 export abstract class GameState {
@@ -70,6 +85,10 @@ export abstract class GameState {
 		return this.getVoteOrderedPlayers()[this.proposerIndex];
 	}
 
+	public get ending(): Ending | null {
+		return this._ending;
+	}
+
 	public proposals: SvelteSet<string> = $state(new SvelteSet());
 	public readonly thisPlayer: ThisPlayer;
 	public readonly players: Map<string, Player> = new Map<string, Player>();
@@ -86,6 +105,7 @@ export abstract class GameState {
 	protected netClient: NetworkClient;
 	protected syncRng: () => number;
 	protected _stateEndTimeMsecs: number = $state(Date.now());
+	protected _ending: Ending | null = $state(null);
 	protected readonly voteOrderSeed: number[];
 
 	private _state: State = $state(State.FirstInfo);
@@ -117,6 +137,11 @@ export abstract class GameState {
 				level.playerHalfDimensions[i]
 			);
 			this.players.set(netClient.name, this.thisPlayer);
+			$effect(() => {
+				if (!this.thisPlayer.alive) {
+					this.sendPlayerState({ died: true });
+				}
+			});
 		}
 
 		{
@@ -166,6 +191,29 @@ export abstract class GameState {
 				console.error('Received player kinematics from unknown player: ' + from);
 			}
 		});
+		netClient.setOnMessage('player-state', (from, msg) => {
+			const obj: PlayerStateMessage = JSON.parse(msg.data);
+			const player = this.players.get(from);
+			if (player) {
+				if (obj.died) {
+					player.alive = false;
+				}
+			} else {
+				console.error('Received player kinematics from unknown player: ' + from);
+			}
+		});
+		netClient.onGuestDisconnect = (guestName) => {
+			const player = this.players.get(guestName);
+			if (player) {
+				player.alive = false;
+			} else {
+				console.error('Received disconnect from unknown player: ' + guestName);
+			}
+		};
+		netClient.onHostDisconnect = () => {
+			netClient.close();
+			goto("/hantu");
+		};
 		this.processPlayerKinematicsInterval = setInterval(() => {
 			if (this.state === State.Day || this.state === State.Night) {
 				for (const player of this.players.values()) {
@@ -175,13 +223,17 @@ export abstract class GameState {
 		}, 16);
 
 		$effect(() => {
-			if (this.getVoteOrderedPlayers()[this.proposerIndex].name === this.thisPlayer.name) {
-				this.sendKeyAction({ propose: { names: Array.from(this.proposals) } });
+			if (this.state === State.KeyProposition) {
+				if (this.getVoteOrderedPlayers()[this.proposerIndex].name === this.thisPlayer.name) {
+					this.sendKeyAction({ propose: { names: Array.from(this.proposals) } });
+				}
 			}
 		});
 		$effect(() => {
-			if (this.thisPlayer.currentVote !== undefined) {
-				this.sendKeyAction({ vote: { value: this.thisPlayer.currentVote } });
+			if (this.state === State.KeyVote) {
+				if (this.thisPlayer.currentVote !== undefined) {
+					this.sendKeyAction({ vote: { value: this.thisPlayer.currentVote } });
+				}
 			}
 		});
 	}
@@ -283,11 +335,15 @@ export abstract class GameState {
 	protected sendKeyAction(msg: KeyActionMessage) {
 		this.netClient.send('key-action', JSON.stringify(msg));
 	}
+
+	protected sendPlayerState(msg: PlayerStateMessage) {
+		this.netClient.send('player-state', JSON.stringify(msg));
+	}
 }
 
-class HostGameState extends GameState {
-	private stateTimeoutId: number;
-	private skipTimer: () => void = () => {};
+export class HostGameState extends GameState {
+	private stateTimeoutId: number | null;
+	public skipTimer: () => void = () => {};
 
 	protected setState(newState: State): boolean {
 		if (!super.setState(newState)) {
@@ -347,7 +403,32 @@ class HostGameState extends GameState {
 				this.sendGameState({ enterNight: {}, endTimeMsecs });
 				break;
 			case State.FinalVote:
-				// TODO
+				endTimeMsecs += 100000;
+				this.sendGameState({ enterFinalVote: {}, endTimeMsecs });
+				break;
+			case State.EndResults:
+				endTimeMsecs += 20000;
+				let aliveCount = 0;
+				let possessedCount = 0;
+
+				for (const player of this.players.values()) {
+					if (player.alive) {
+						aliveCount++;
+						if (player.possessed) {
+							possessedCount++;
+						}
+					}
+				}
+
+				if (possessedCount === 0) {
+					this._ending = Ending.GreatEnd;
+				} else if (possessedCount === aliveCount) {
+					this._ending = Ending.BadEnd;
+				} else {
+					this._ending = Ending.GoodEnd;
+				}
+
+				this.sendGameState({ enterEndResults: { ending: this._ending }, endTimeMsecs });
 				break;
 			default:
 				console.error('Unknown state: ' + newState);
@@ -357,11 +438,12 @@ class HostGameState extends GameState {
 		return true;
 	}
 
-	constructor(netClient: NetworkClient, roomCode: string, level: Level) {
+	public constructor(netClient: NetworkClient, roomCode: string, level: Level) {
 		super(netClient, roomCode, level);
 
 		netClient.setOnMessage('key-action', (from, msg) => {
 			const obj: KeyActionMessage = JSON.parse(msg.data);
+			// Skip timer when all players have voted if another player just voted
 			if (obj.vote) {
 				const player = this.players.get(from);
 				if (player) {
@@ -376,6 +458,7 @@ class HostGameState extends GameState {
 					}
 				}
 				this.skipTimer();
+				// Skip timer if a player has finalized their proposal
 			} else if (obj.propose) {
 				this.proposals = new SvelteSet(obj.propose.names);
 				if (obj.propose.final) {
@@ -383,6 +466,49 @@ class HostGameState extends GameState {
 				}
 			}
 		});
+
+		// Skip timer when all players have voted if we just voted
+		$effect(() => {
+			if (this.state === State.KeyVote) {
+				if (this.thisPlayer.currentVote !== undefined) {
+					for (const player of this.players.values()) {
+						if (player._currentVote === undefined) {
+							return;
+						}
+					}
+					this.skipTimer();
+				}
+			}
+		});
+
+		// End the game if all possessed players are dead or the only players left are possessed
+		for (const currentPlayer of this.players.values()) {
+			$effect(() => {
+				if (!currentPlayer.alive) {
+					let aliveCount = 0;
+					let possessedCount = 0;
+					for (const player of this.players.values()) {
+						if (player.alive) {
+							aliveCount++;
+							if (player.possessed) {
+								possessedCount++;
+							}
+						}
+					}
+					if (possessedCount === 0 || possessedCount === aliveCount) {
+						if (this.stateTimeoutId) {
+							clearTimeout(this.stateTimeoutId);
+						}
+						this.setState(State.EndResults);
+						this._stateEndTimeMsecs = Date.now() + 20000;
+						setTimeout(() => {
+							this.netClient.close();
+							goto("/hantu");
+						}, 20000);
+					}
+				}
+			});
+		}
 
 		this._stateEndTimeMsecs = Date.now() + 5000;
 		this.sendGameState({ startGame: {}, endTimeMsecs: this._stateEndTimeMsecs });
@@ -394,14 +520,17 @@ class HostGameState extends GameState {
 				}, this.stateEndTimeMsecs - Date.now());
 				this.skipTimer = () => {
 					this.skipTimer = () => {};
-					clearTimeout(this.stateTimeoutId);
+					if (this.stateTimeoutId) {
+						clearTimeout(this.stateTimeoutId);
+					}
 					resolve();
 				};
 			});
 		};
 
+		// The state machine
 		this.stateTimeoutId = setTimeout(async () => {
-			while (true) {
+			for (let day = 0; day < 5; day++) {
 				while (true) {
 					this.setState(State.KeyProposition);
 					await wait();
@@ -430,20 +559,13 @@ class HostGameState extends GameState {
 				this.setState(State.Night);
 				await wait();
 			}
+			this.setState(State.FinalVote);
+			await wait();
+			this.setState(State.EndResults);
+			await wait();
+			this.netClient.close();
+			goto("/hantu");
 		}, 5000);
-
-		$effect(() => {
-			if (this.state === State.KeyVote) {
-				if (this.thisPlayer.currentVote !== undefined) {
-					for (const player of this.players.values()) {
-						if (player._currentVote === undefined) {
-							return;
-						}
-					}
-					this.skipTimer();
-				}
-			}
-		});
 	}
 
 	public finalizeProposals(): void {
@@ -505,6 +627,12 @@ class GuestGameState extends GameState {
 				this.setState(State.Day);
 			} else if (msgObj.enterNight) {
 				this.setState(State.Night);
+			} else if (msgObj.enterFinalVote) {
+				// TODO: Implement
+				this.setState(State.FinalVote);
+			} else if (msgObj.enterEndResults) {
+				this._ending = msgObj.enterEndResults.ending;
+				this.setState(State.EndResults);
 			}
 		});
 

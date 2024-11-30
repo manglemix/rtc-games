@@ -22,6 +22,7 @@ export interface Level {
 	readonly playerSprites: string[];
 	readonly playerHalfDimensions: Vector2[];
 	readonly playerSpeed: number;
+	readonly voteCameraRadius: number;
 }
 
 export const DEBUG_LEVEL: Level = {
@@ -36,5 +37,6 @@ export const DEBUG_LEVEL: Level = {
 	jailOrigins: [],
 	playerSprites: ['/characters/hantu/player01.png'],
 	playerHalfDimensions: [new Vector2(15, 15)],
-	playerSpeed: 75
+	playerSpeed: 75,
+	voteCameraRadius: 300
 };

@@ -4,16 +4,28 @@
 	import { Vector2 } from '$lib/index.svelte';
 	import Timer from '../ui/Timer.svelte';
 	import Player from '../ui/Player.svelte';
-	import Vignette from '$lib/vignette/vignette.svelte';
-
-	let bgWidth = $state(0);
-	let bgHeight = $state(0);
-	let windowWidth = $state(0);
-	let windowHeight = $state(0);
-	let bgScale = $state(0);
-	let processInterval = 0;
+	import Vignette from '$lib/vignette/Vignette.svelte';
 
 	const gameState: GameState = getContext('gameState');
+	let windowWidth = $state(0);
+	let windowHeight = $state(0);
+	let processInterval = 0;
+	// voteCameraRadius
+	const bgScale = $derived.by(() => {
+		const maxDimension = Math.max(windowWidth, windowHeight);
+		if (
+			gameState.state === State.KeyProposition ||
+			gameState.state === State.KeyVote ||
+			gameState.state === State.KeyVoteResults ||
+			gameState.state === State.ForcedKeyVoteResults
+		) {
+			return maxDimension / gameState.level.voteCameraRadius;
+		} else {
+			return maxDimension / gameState.level.visibleRadius;
+		}
+	});
+	const bgWidth = $derived(gameState.level.width * bgScale);
+	const bgHeight = $derived(gameState.level.height * bgScale);
 	let movementVector = new Vector2(0, 0);
 	let cameraOrigin = $state(gameState.thisPlayer.origin);
 
@@ -83,10 +95,6 @@
 		const onResize = () => {
 			windowWidth = window.innerWidth;
 			windowHeight = window.innerHeight;
-			const maxDimension = Math.max(windowWidth, windowHeight);
-			bgScale = maxDimension / gameState.level.visibleRadius;
-			bgWidth = gameState.level.width * bgScale;
-			bgHeight = gameState.level.height * bgScale;
 		};
 		window.onresize = onResize;
 		onResize();
@@ -133,7 +141,9 @@
 />
 
 {#each gameState.players as [_name, player]}
-	<Player {bgScale} {windowWidth} {windowHeight} playerObj={player} {gameState} {cameraOrigin} />
+	{#if player.alive}
+		<Player {bgScale} {windowWidth} {windowHeight} playerObj={player} {gameState} {cameraOrigin} />
+	{/if}
 {/each}
 
 {#if gameState.state === State.KeyProposition && gameState.proposals.size === gameState.requiredProposals && gameState.proposer.name === gameState.thisPlayer.name}
@@ -166,8 +176,9 @@
 		</button>
 	</div>
 {/if}
-
-<Vignette />
+{#if gameState.state === State.Night}
+	<Vignette />
+{/if}
 <Timer endTimeMsecs={gameState.stateEndTimeMsecs} />
 
 <style>

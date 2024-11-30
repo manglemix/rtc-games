@@ -10,8 +10,8 @@
 	<section>
 		{#if gameState.thisPlayer.possessed}
 			<h1>YOU ARE POSSESSED</h1>
-			{#each gameState.players as [name, _player]}
-				{#if name !== gameState.thisPlayer.name}
+			{#each gameState.players as [name, player]}
+				{#if name !== gameState.thisPlayer.name && player.possessed}
 					<p>{name}</p>
 				{/if}
 			{/each}

@@ -1,11 +1,11 @@
 import { Vector2 } from '$lib/index.svelte';
 import ImageObj from 'image-js';
-import type { AreaType } from '../levels/level.svelte';
+import { AreaType } from '../levels/level.svelte';
 
 export class Player {
 	protected _velocity: Vector2 = $state(new Vector2(0, 0));
 	protected _origin: Vector2 = $state(new Vector2(200, 260));
-	protected _alive = $state(true);
+	public alive = $state(true);
 
 	_currentVote?: boolean = $state(undefined);
 	_possessed = false;
@@ -29,10 +29,6 @@ export class Player {
 
 	public get velocity() {
 		return this._velocity;
-	}
-
-	public get alive() {
-		return this._alive;
 	}
 
 	public set origin(newOrigin: Vector2) {
@@ -61,6 +57,7 @@ export class ThisPlayer extends Player {
 	private collisionMask?: ImageObj;
 	// 0 means no collision layer
 	private currentCollisionLayer = 0;
+	private currentAreaType = AreaType.DiningArea;
 
 	constructor(
 		collisionMaskUrl: string,
@@ -127,12 +124,13 @@ export class ThisPlayer extends Player {
 			const newLayer = px[3] === 0 ? 0 : px[0];
 			if (newLayer !== this.currentCollisionLayer) {
 				if (this.currentCollisionLayer !== 0) {
-					this.onExitArea(px[1] as AreaType, this.currentCollisionLayer);
+					this.onExitArea(this.currentAreaType, this.currentCollisionLayer);
 				}
-				if (newLayer !== 0) {
-					this.onEnterArea(px[1] as AreaType, newLayer);
-				}
+				this.currentAreaType = px[1] as AreaType;
 				this.currentCollisionLayer = newLayer;
+				if (newLayer !== 0) {
+					this.onEnterArea(this.currentAreaType, newLayer);
+				}
 			}
 		} else {
 			this.origin = this.origin.add(step);
