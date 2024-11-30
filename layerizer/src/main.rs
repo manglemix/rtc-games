@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::path::Path;
 
 use anyhow::Context;
 use fxhash::FxHashMap;
@@ -26,10 +26,8 @@ enum AreaType {
 	Crypt = 5
 }
 
-impl FromStr for AreaType {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+impl AreaType {
+    fn from_str(s: &str, file: &Path) -> Result<Self, ()> {
         match s {
             "DiningArea" => Ok(AreaType::DiningArea),
             "Kitchen" => Ok(AreaType::Kitchen),
@@ -38,7 +36,7 @@ impl FromStr for AreaType {
             "Jail" => Ok(AreaType::Jail),
             "Crypt" => Ok(AreaType::Crypt),
             _ => {
-                eprintln!("Unknown area type {:?}", s);
+                eprintln!("Unknown area type {s:?} in {file:?}");
                 Err(())
             }
         }
@@ -63,7 +61,15 @@ fn main() -> anyhow::Result<()> {
         .map(|entry| entry.path())
         .collect();
 
-    psds.into_par_iter().for_each(|psd_path| {
+    psds.into_par_iter().for_each(|mut psd_path| {
+        // Canonicalize the path for debugging
+        psd_path = match psd_path.canonicalize() {
+            Ok(psd_path) => psd_path,
+            Err(err) => {
+                eprintln!("Error canonicalizing {:?}: {}", psd_path, err);
+                return;
+            }
+        };
         let bytes = match std::fs::read(&psd_path) {
             Ok(bytes) => bytes,
             Err(err) => {
@@ -208,7 +214,7 @@ fn main() -> anyhow::Result<()> {
                     .filter(|layer| !layer.visible())
                     .map(|layer| {
                         Result::<_, ()>::Ok((
-                            AreaType::from_str(layer.name())?,
+                            AreaType::from_str(layer.name(), &psd_path)?,
                             RgbaImage::from_raw(psd.width(), psd.height(), layer.rgba()).unwrap()
                         ))
                     })
@@ -237,7 +243,7 @@ fn main() -> anyhow::Result<()> {
                 compiled
                     .par_enumerate_pixels_mut()
                     .for_each(|(x, y, pixel)| {
-                        if pixel[1] != 0 {
+                        if pixel[3] != 0 {
                             return;
                         }
                         for (i, (area_type, layer)) in layers.iter().rev().enumerate() {

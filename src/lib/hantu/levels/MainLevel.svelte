@@ -4,6 +4,7 @@
 	import { Vector2 } from '$lib/index.svelte';
 	import Timer from '../ui/Timer.svelte';
 	import Player from '../ui/Player.svelte';
+	import Vignette from '$lib/vignette/vignette.svelte';
 
 	let bgWidth = $state(0);
 	let bgHeight = $state(0);
@@ -166,6 +167,7 @@
 	</div>
 {/if}
 
+<Vignette />
 <Timer endTimeMsecs={gameState.stateEndTimeMsecs} />
 
 <style>

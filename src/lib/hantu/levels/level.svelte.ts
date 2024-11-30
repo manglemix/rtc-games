@@ -32,7 +32,7 @@ export const DEBUG_LEVEL: Level = {
 	voteOrigin: new Vector2(500, 435),
 	voteRadius: 80,
 	visibleRadius: 200,
-	cryptOrigin: new Vector2(900, 400),
+	cryptOrigin: new Vector2(500, 940),
 	jailOrigins: [],
 	playerSprites: ['/characters/hantu/player01.png'],
 	playerHalfDimensions: [new Vector2(15, 15)],
