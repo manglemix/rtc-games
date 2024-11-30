@@ -1,10 +1,24 @@
-import { on } from 'svelte/events';
-
 export type SdpOffer = { sdp: RTCSessionDescriptionInit; ices: RTCIceCandidate[] };
 export type SdpAnswer = { sdp: RTCSessionDescriptionInit; ices: RTCIceCandidate[] };
 
 class NetworkPeer {
-	private rtc: RTCPeerConnection = new RTCPeerConnection();
+	private rtc: RTCPeerConnection = new RTCPeerConnection({
+		iceServers: [
+			{
+				urls: ['stun:stun.l.google.com:19302']
+			},
+			// {
+			// 	urls: ['turn:192.158.29.39:3478?transport=udp'],
+			// 	credential: 'JZEOEt2V3Qb0y27GRntt2u2PAYA=',
+			// 	username: '28224511:1379330808'
+			// },
+			// {
+			// 	urls: ['turn:192.158.29.39:3478?transport=tcp'],
+			// 	'credential': 'JZEOEt2V3Qb0y27GRntt2u2PAYA=',
+			// 	'username': '28224511:1379330808'
+			// }
+		]
+	});
 	private rtcConnChannel: RTCDataChannel | null = null;
 	private dataChannels: Map<string, RTCDataChannel> = new Map();
 	onDisconnect: () => void = () => {};
