@@ -15,7 +15,7 @@
 	import { onDestroy, onMount } from 'svelte';
 
 	const name = 'host';
-	const roomCode = createRoomCode();
+	let roomCode = $state('');
 	let botIndex = 0;
 	let bots: NetworkClient[] = $state([]);
 	let netClient: NetworkClient | null = $state(null);
@@ -27,6 +27,7 @@
 		if (window.document.fullscreenElement) {
 			document.exitFullscreen();
 		}
+		roomCode = createRoomCode();
 		netClient = NetworkClient.createRoom(
 			name,
 			DATA_CHANNELS,

@@ -78,6 +78,7 @@
 			{/if}
 		</section>
 	{/if}
+	<a href="/hantu">Back to lobby</a>
 </div>
 
 <Timer endTimeMsecs={gameState.stateEndTimeMsecs} />

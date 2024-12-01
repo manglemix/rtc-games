@@ -220,6 +220,17 @@ export abstract class GameState {
 				console.error('Received player kinematics from unknown player: ' + from);
 			}
 		});
+		netClient.setOnMessage('crypt-state', (_from, msg) => {
+			const obj: CryptStateMessage = JSON.parse(msg.data);
+			if (obj.addProgress) {
+				this._cryptProgress += obj.addProgress;
+				if (this._cryptProgress >= 1) {
+					this._cryptProgress = 1;
+				} else if (this._cryptProgress < 0) {
+					this._cryptProgress = 0;
+				}
+			}
+		});
 		netClient.onGuestDisconnect = (guestName) => {
 			const player = this.players.get(guestName);
 			if (player) {
@@ -288,6 +299,13 @@ export abstract class GameState {
 
 	public addCryptProgress(progress: number): void {
 		this._cryptProgress += progress;
+
+		if (this._cryptProgress >= 1) {
+			this._cryptProgress = 1;
+		} else if (this._cryptProgress < 0) {
+			this._cryptProgress = 0;
+		}
+
 		this.sendCryptState({ addProgress: progress });
 	}
 
@@ -303,6 +321,7 @@ export abstract class GameState {
 		}
 		switch (newState) {
 			case State.KeyProposition:
+				this.thisPlayer.forceExitLayer();
 				if (this._state === State.KeyVoteResults) {
 					this._proposerIndex = (this._proposerIndex + 1) % this.players.size;
 				} else {
@@ -414,6 +433,12 @@ export class HostGameState extends GameState {
 				break;
 			case State.ForcedKeyVoteResults:
 				endTimeMsecs += 3000;
+
+				const players2 = Array.from(this.players.values());
+				while (this.proposals.size < this.requiredProposals) {
+					this.proposals.add(players2[Math.floor(Math.random() * players2.length)].name);
+				}
+
 				this.sendGameState({ enterForcedKeyVoteResults: {}, endTimeMsecs });
 				break;
 			case State.Day:

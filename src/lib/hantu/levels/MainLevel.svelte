@@ -5,6 +5,8 @@
 	import Timer from '../ui/Timer.svelte';
 	import Player from '../ui/Player.svelte';
 	import Vignette from '$lib/vignette/Vignette.svelte';
+	import { AreaType } from './level.svelte';
+	import CryptFixes from '../ui/crypt/CryptFixes.svelte';
 
 	const gameState: GameState = getContext('gameState');
 	let windowWidth = $state(0);
@@ -30,10 +32,6 @@
 	let cameraOrigin = $state(gameState.thisPlayer.origin);
 
 	function keyDown(event: KeyboardEvent) {
-		if (event.defaultPrevented) {
-			return; // Do nothing if event already handled
-		}
-
 		if (gameState.state !== State.Day && gameState.state !== State.Night) {
 			return;
 		}
@@ -55,21 +53,22 @@
 			case 'ArrowRight':
 				movementVector.x = 1;
 				break;
+			default:
+				return; // Allow other keys to be handled
 		}
-		gameState.thisPlayer.velocity = movementVector.normalize().mul(gameState.level.playerSpeed);
-
-		if (event.code !== 'Tab') {
-			// Consume the event so it doesn't get handled twice,
-			// as long as the user isn't trying to move focus away
-			event.preventDefault();
-		}
-	}
-
-	function keyUp(event: KeyboardEvent) {
 		if (event.defaultPrevented) {
 			return; // Do nothing if event already handled
 		}
+		gameState.thisPlayer.velocity = movementVector.normalize().mul(gameState.level.playerSpeed);
 
+		// if (event.code !== 'Tab') {
+		// 	// Consume the event so it doesn't get handled twice,
+		// 	// as long as the user isn't trying to move focus away
+		// 	event.preventDefault();
+		// }
+	}
+
+	function keyUp(event: KeyboardEvent) {
 		switch (event.code) {
 			case 'KeyS':
 			case 'ArrowDown':
@@ -87,6 +86,11 @@
 			case 'ArrowRight':
 				movementVector.x = 0;
 				break;
+			default:
+				return; // Allow other keys to be handled
+		}
+		if (event.defaultPrevented) {
+			return; // Do nothing if event already handled
 		}
 		gameState.thisPlayer.velocity = movementVector.normalize().mul(gameState.level.playerSpeed);
 	}
@@ -176,10 +180,11 @@
 		</button>
 	</div>
 {/if}
-{#if gameState.state === State.Night}
-	<Vignette />
-{/if}
+<Vignette />
 <Timer endTimeMsecs={gameState.stateEndTimeMsecs} />
+{#if gameState.thisPlayer.currentAreaType === AreaType.Crypt}
+	<CryptFixes />
+{/if}
 
 <style>
 	#background {

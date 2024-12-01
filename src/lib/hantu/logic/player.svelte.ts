@@ -56,8 +56,14 @@ export class ThisPlayer extends Player {
 
 	private collisionMask?: ImageObj;
 	// 0 means no collision layer
-	private currentCollisionLayer = 0;
-	private currentAreaType = AreaType.DiningArea;
+	private currentCollisionLayer = $state(0);
+	private _currentAreaType = $state(AreaType.DiningArea);
+	public readonly currentAreaType = $derived.by(() => {
+		if (this.currentCollisionLayer === 0) {
+			return null;
+		}
+		return this._currentAreaType;
+	});
 
 	constructor(
 		collisionMaskUrl: string,
@@ -73,6 +79,10 @@ export class ThisPlayer extends Player {
 
 	public setVote(vote: boolean) {
 		this._currentVote = vote;
+	}
+
+	forceExitLayer() {
+		this.currentCollisionLayer = 0;
 	}
 
 	process(delta: number) {
@@ -130,12 +140,12 @@ export class ThisPlayer extends Player {
 
 			if (newLayer !== this.currentCollisionLayer) {
 				if (this.currentCollisionLayer !== 0) {
-					this.onExitArea(this.currentAreaType, this.currentCollisionLayer);
+					this.onExitArea(this._currentAreaType, this.currentCollisionLayer);
 				}
-				this.currentAreaType = newAreaType;
+				this._currentAreaType = newAreaType;
 				this.currentCollisionLayer = newLayer;
 				if (newLayer !== 0) {
-					this.onEnterArea(this.currentAreaType, newLayer);
+					this.onEnterArea(this._currentAreaType, newLayer);
 				}
 			}
 			this.origin = toCheck;

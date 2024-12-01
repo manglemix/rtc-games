@@ -11,5 +11,8 @@
 		(window as any).kill = (name: string) => {
 			gameState.players.get(name)!.alive = false;
 		};
+		(window as any).setProgress = (value: number) => {
+			gameState.addCryptProgress(value - gameState.cryptProgress);
+		};
 	});
 </script>

@@ -36,7 +36,11 @@
 			`--height: ${PLAYER_HALF_HEIGHT * 2 * bgScale}px;` +
 			`--left: ${windowWidth / 2 - bgScale * (PLAYER_HALF_WIDTH - delta.x)}px;` +
 			`--top: ${windowHeight / 2 - bgScale * (PLAYER_HALF_HEIGHT - delta.y)}px;` +
-			(gameState.proposals.has(playerObj.name)
+			(gameState.proposals.has(playerObj.name) &&
+			(gameState.state === State.KeyProposition ||
+				gameState.state === State.KeyVote ||
+				gameState.state === State.KeyVoteResults ||
+				gameState.state === State.ForcedKeyVoteResults)
 				? 'filter: saturate(90%) brightness(80%) hue-rotate(90deg);'
 				: '')
 		);
