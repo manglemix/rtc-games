@@ -4,6 +4,7 @@ import { SvelteSet } from 'svelte/reactivity';
 import type { Level } from '../levels/level.svelte';
 import { Player, ThisPlayer } from './player.svelte';
 import { goto } from '$app/navigation';
+import { browser } from '$app/environment';
 
 export const DATA_CHANNELS: DataChannelInit[] = [
 	{
@@ -268,6 +269,9 @@ export abstract class GameState {
 	}
 
 	public static create(netClient: NetworkClient, roomCode: string, level: Level): GameState {
+		if (!browser) {
+			return new NoopGameState(netClient, roomCode, level);
+		}
 		if (netClient.isHost) {
 			return new HostGameState(netClient, roomCode, level);
 		} else {
@@ -711,4 +715,8 @@ class GuestGameState extends GameState {
 			}
 		});
 	}
+}
+
+class NoopGameState extends GameState {
+
 }
