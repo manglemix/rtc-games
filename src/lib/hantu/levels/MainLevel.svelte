@@ -4,9 +4,9 @@
 	import { Vector2 } from '$lib/index.svelte';
 	import Timer from '../ui/Timer.svelte';
 	import Player from '../ui/Player.svelte';
-	import Vignette from '$lib/vignette/Vignette.svelte';
 	import { AreaType } from './level.svelte';
 	import CryptFixes from '../ui/crypt/CryptFixes.svelte';
+	import Vignette from '$lib/hantu/vignette/Vignette.svelte';
 
 	const gameState: GameState = getContext('gameState');
 	let windowWidth = $state(0);
