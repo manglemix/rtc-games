@@ -1,6 +1,7 @@
 import { Vector2 } from '$lib/index.svelte';
 import ImageObj from 'image-js';
 import { AreaType } from '../levels/level.svelte';
+import { browser } from '$app/environment';
 
 export class Player {
 	protected _velocity: Vector2 = $state(new Vector2(0, 0));
@@ -72,9 +73,11 @@ export class ThisPlayer extends Player {
 		spriteHalfDimensions: Vector2
 	) {
 		super(name, spriteUrl, spriteHalfDimensions);
-		ImageObj.load(collisionMaskUrl).then((img) => {
-			this.collisionMask = img;
-		});
+		if (browser) {
+			ImageObj.load(collisionMaskUrl).then((img) => {
+				this.collisionMask = img;
+			});
+		}
 	}
 
 	public setVote(vote: boolean) {

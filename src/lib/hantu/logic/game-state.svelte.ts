@@ -139,6 +139,18 @@ export abstract class GameState {
 	) {
 		this.syncRng = sfc32StrSeeded(roomCode);
 		this.netClient = netClient;
+		this.voteOrderSeed = [
+			this.syncRandInt(0, 0xffffffff),
+			this.syncRandInt(0, 0xffffffff),
+			this.syncRandInt(0, 0xffffffff),
+			this.syncRandInt(0, 0xffffffff)
+		];
+		if (!browser) {
+			this.propagatePlayerKinematicsInterval = setInterval(() => {}, 50);
+			this.processPlayerKinematicsInterval = setInterval(() => {}, 16);
+			this.thisPlayer = new ThisPlayer(level.collisionMaskUrl, netClient.name, level.playerSprites[0], level.playerHalfDimensions[0]);
+			return;
+		}
 
 		for (const peerName of netClient.getPeerNames()) {
 			const i = this.syncRandInt(0, level.playerSprites.length - 1);
@@ -174,12 +186,6 @@ export abstract class GameState {
 				player._possessed = true;
 			}
 		}
-		this.voteOrderSeed = [
-			this.syncRandInt(0, 0xffffffff),
-			this.syncRandInt(0, 0xffffffff),
-			this.syncRandInt(0, 0xffffffff),
-			this.syncRandInt(0, 0xffffffff)
-		];
 
 		// Propagate player kinematics at 20fps
 		this.propagatePlayerKinematicsInterval = setInterval(() => {
