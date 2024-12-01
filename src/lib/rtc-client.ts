@@ -4,16 +4,29 @@ export type SdpAnswer = { sdp: RTCSessionDescriptionInit; ices: RTCIceCandidate[
 class NetworkPeer {
 	private rtc: RTCPeerConnection = new RTCPeerConnection({
 		iceServers: [
-			{ urls: "stun:stun.l.google.com:19302" },
-			{ urls: "stun:stun.l.google.com:5349" },
-			{ urls: "stun:stun1.l.google.com:3478" },
-			{ urls: "stun:stun1.l.google.com:5349" },
-			{ urls: "stun:stun2.l.google.com:19302" },
-			{ urls: "stun:stun2.l.google.com:5349" },
-			{ urls: "stun:stun3.l.google.com:3478" },
-			{ urls: "stun:stun3.l.google.com:5349" },
-			{ urls: "stun:stun4.l.google.com:19302" },
-			{ urls: "stun:stun4.l.google.com:5349" }
+			{
+			  urls: "stun:stun.relay.metered.ca:80",
+			},
+			{
+			  urls: "turn:global.relay.metered.ca:80",
+			  username: "03f299ccbd35840a927a7012",
+			  credential: "cfJhlf3VwrROlRif",
+			},
+			{
+			  urls: "turn:global.relay.metered.ca:80?transport=tcp",
+			  username: "03f299ccbd35840a927a7012",
+			  credential: "cfJhlf3VwrROlRif",
+			},
+			{
+			  urls: "turn:global.relay.metered.ca:443",
+			  username: "03f299ccbd35840a927a7012",
+			  credential: "cfJhlf3VwrROlRif",
+			},
+			{
+			  urls: "turns:global.relay.metered.ca:443?transport=tcp",
+			  username: "03f299ccbd35840a927a7012",
+			  credential: "cfJhlf3VwrROlRif",
+			},
 		]
 	});
 	private rtcConnChannel: RTCDataChannel | null = null;
