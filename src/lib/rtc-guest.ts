@@ -15,12 +15,12 @@ interface ConnectingPeer {
 
 export class GuestPeer extends NetworkPeer {
 	private constructor(
-		public readonly hostName: string,
-		public readonly name: string,
+		hostName: string,
+		name: string,
 		hostRtc: RTCPeerConnection,
 		dataChannels: Record<string, RTCDataChannel>
 	) {
-		super();
+		super(name, hostName, false);
 		this.addRtc(hostName, hostRtc, dataChannels);
 	}
 
@@ -41,11 +41,7 @@ export class GuestPeer extends NetworkPeer {
 
 		const fromHost = (obj: SignalingHostConnectionMessage) => {
 			if (obj.ice !== undefined) {
-				if (obj.ice === null) {
-					rtc.addIceCandidate();
-				} else {
-					rtc.addIceCandidate(obj.ice);
-				}
+				rtc.addIceCandidate(obj.ice ?? undefined);
 			}
 			if (obj.answer) {
 				rtc.setRemoteDescription(obj.answer);
@@ -72,8 +68,9 @@ export class GuestPeer extends NetworkPeer {
 					const obj: RtcHostConnectionMessage = JSON.parse(msg.data);
 
 					if (obj.connectedPeers) {
+						console.log(`Connected peers: ${obj.connectedPeers}`);
 						for (const peerName of obj.connectedPeers) {
-							if (resolvedPeer!.isConnectedTo(peerName)) {
+							if (peerName === name || resolvedPeer!.isConnectedTo(peerName)) {
 								continue;
 							}
 							const tieBreaker = [name, peerName].sort();
@@ -221,7 +218,7 @@ export class GuestPeer extends NetworkPeer {
 							break;
 						case 'connected':
 							resolvedPeer = new GuestPeer(hostName, name, rtc, dataChannels);
-							resolve(resolvedPeer);
+							hostRoomChannel.onopen = () => resolve(resolvedPeer);
 							break;
 						case 'disconnected':
 						case 'closed':

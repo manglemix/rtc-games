@@ -5,8 +5,8 @@ import type { RequestHandler } from '@sveltejs/kit';
 import type { SignalingGuestConnectionMessage, SignalingHostConnectionMessage } from './rtc';
 
 export interface CreateRoomRequest {
-    readonly game: string;
-    readonly hostName: string;
+	readonly game: string;
+	readonly hostName: string;
 }
 
 /**
@@ -19,7 +19,7 @@ export const createRoom: RequestHandler = async ({ request }) => {
 		return new Response(null, { status: 400 });
 	}
 
-	if (hostName.length < 4 || hostName.length > 16) {
+	if (hostName.length < 2 || hostName.length > 16) {
 		return new Response(null, { status: 400 });
 	}
 
@@ -36,23 +36,40 @@ export const createRoom: RequestHandler = async ({ request }) => {
 		}
 	});
 	await rtcKv.connect();
-	const roomCodeHex: string = await rtcKv.aclGenPass(36);
-	let roomCode = Buffer.from(roomCodeHex, 'hex').toString('base64');
-	roomCode = roomCode.replaceAll('+', '0').replaceAll('/', '1').replaceAll('=', '2');
-    
-    await rtcKv.set(`${game}:${roomCode}:hostName`, hostName, { EX: 1800 });
+	// const roomCodeHex: string = await rtcKv.aclGenPass(36);
+	// let roomCode = Buffer.from(roomCodeHex, 'hex').toString('base64');
+	// roomCode = roomCode.replaceAll('+', '0').replaceAll('/', '1').replaceAll('=', '2');
+	const generateRoomCode = () => {
+		const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+		let result = '';
+		for (let i = 0; i < 6; i++) {
+			result += characters.charAt(Math.floor(Math.random() * characters.length));
+		}
+		return result;
+	};
 
-	return new Response(null, { status: 204 });
+	const roomCode = generateRoomCode();
+
+	await rtcKv.set(`${game}:${roomCode}:hostName`, hostName, { EX: 1800 });
+
+	return new Response(roomCode, { status: 200 });
 };
 
+export interface CloseRoomRequest {
+	readonly game: string;
+	readonly roomCode: string;
+}
+
 /**
- * Guests GET this endpoint to check if the room exists and get the host's name.
+ * The host DELETEs this endpoint to close the room.
  */
-export const getHostName: RequestHandler = async ({ params }) => {
-    const { game, roomCode } = params;
-    if (game === undefined || roomCode === undefined) {
-        return new Response(null, { status: 404 });
-    }
+export const closeRoom: RequestHandler = async ({ request }) => {
+	const { game, roomCode }: CloseRoomRequest = await request.json();
+
+	if (game !== 'hantu') {
+		return new Response(null, { status: 400 });
+	}
+
 	const rtcKv = createClient({
 		password: RTC_KV_ROOT_TOKEN,
 		socket: {
@@ -61,20 +78,41 @@ export const getHostName: RequestHandler = async ({ params }) => {
 		}
 	});
 	await rtcKv.connect();
-    
-    const hostName = await rtcKv.get(`${game}:${roomCode}:hostName`);
+	await rtcKv.del(`${game}:${roomCode}:hostName`);
 
-    if (hostName === null) {
-        return new Response(null, { status: 404 });
-    }
+	return new Response(null, { status: 204 });
+};
+
+/**
+ * Guests GET this endpoint to check if the room exists and get the host's name.
+ */
+export const getHostName: RequestHandler = async ({ params }) => {
+	const { game, roomCode } = params;
+	if (game === undefined || roomCode === undefined) {
+		return new Response(null, { status: 404 });
+	}
+	const rtcKv = createClient({
+		password: RTC_KV_ROOT_TOKEN,
+		socket: {
+			host: RTC_KV_URL,
+			port: parseInt(RTC_KV_PORT)
+		}
+	});
+	await rtcKv.connect();
+
+	const hostName = await rtcKv.get(`${game}:${roomCode}:hostName`);
+
+	if (hostName === null) {
+		return new Response(null, { status: 404 });
+	}
 
 	return new Response(hostName, { status: 200 });
 };
 
 export interface PushGuestMessageRequest {
-    readonly game: string;
-    readonly roomCode: string;
-    readonly message: SignalingGuestConnectionMessage;
+	readonly game: string;
+	readonly roomCode: string;
+	readonly message: SignalingGuestConnectionMessage;
 }
 
 /**
@@ -95,16 +133,16 @@ export const pushGuestMessage: RequestHandler = async ({ request }) => {
 		}
 	});
 	await rtcKv.connect();
-    await rtcKv.lPush(`${game}:${roomCode}:guestMessages`, JSON.stringify(message));
-    await rtcKv.expire(`${game}:${roomCode}:guestMessages`, 1800);
+	await rtcKv.lPush(`${game}:${roomCode}:guestMessages`, JSON.stringify(message));
+	await rtcKv.expire(`${game}:${roomCode}:guestMessages`, 1800);
 
 	return new Response(null, { status: 204 });
 };
 
 export interface RespondToGuestRequest {
-    readonly game: string;
-    readonly roomCode: string;
-    readonly messages: Record<string, SignalingHostConnectionMessage>;
+	readonly game: string;
+	readonly roomCode: string;
+	readonly messages: Record<string, SignalingHostConnectionMessage>;
 }
 
 /**
@@ -126,17 +164,17 @@ export const respondToGuest: RequestHandler = async ({ request }) => {
 	});
 	await rtcKv.connect();
 
-    for (const [peerName, message] of Object.entries(messages)) {
-        await rtcKv.lPush(`${game}:${roomCode}:${peerName}:hostMessages`, JSON.stringify(message));
-        await rtcKv.expire(`${game}:${roomCode}:${peerName}:hostMessages`, 1800);
-    }
+	for (const [peerName, message] of Object.entries(messages)) {
+		await rtcKv.lPush(`${game}:${roomCode}:${peerName}:hostMessages`, JSON.stringify(message));
+		await rtcKv.expire(`${game}:${roomCode}:${peerName}:hostMessages`, 1800);
+	}
 
 	return new Response(null, { status: 204 });
 };
 
 export interface PopGuestMessagesRequest {
-    readonly game: string;
-    readonly roomCode: string;
+	readonly game: string;
+	readonly roomCode: string;
 }
 
 export type PopGuestMessagesResponse = SignalingGuestConnectionMessage[];
@@ -159,26 +197,32 @@ export const popGuestMessages: RequestHandler = async ({ request }) => {
 		}
 	});
 	await rtcKv.connect();
-    const messages: PopGuestMessagesResponse = [];
-    const { element: message } = await rtcKv.brPop(`${game}:${roomCode}:guestMessages`, 8) ?? {};
-    if (message === undefined) {
-        return new Response(JSON.stringify(messages), { status: 200, headers: { 'Content-Type': 'application/json' } });
-    }
-    messages.push(JSON.parse(message));
-    while (true) {
-        const message = await rtcKv.rPop(`${game}:${roomCode}:guestMessages`);
-        if (message === null) {
-            break;
-        }
-        messages.push(JSON.parse(message));
-    }
-	return new Response(JSON.stringify(messages), { status: 200, headers: { 'Content-Type': 'application/json' } });
+	const messages: PopGuestMessagesResponse = [];
+	const { element: message } = (await rtcKv.brPop(`${game}:${roomCode}:guestMessages`, 8)) ?? {};
+	if (message === undefined) {
+		return new Response(JSON.stringify(messages), {
+			status: 200,
+			headers: { 'Content-Type': 'application/json' }
+		});
+	}
+	messages.push(JSON.parse(message));
+	while (true) {
+		const message = await rtcKv.rPop(`${game}:${roomCode}:guestMessages`);
+		if (message === null) {
+			break;
+		}
+		messages.push(JSON.parse(message));
+	}
+	return new Response(JSON.stringify(messages), {
+		status: 200,
+		headers: { 'Content-Type': 'application/json' }
+	});
 };
 
 export interface PopHostMessagesRequest {
-    readonly game: string;
-    readonly roomCode: string;
-    readonly name: string;
+	readonly game: string;
+	readonly roomCode: string;
+	readonly name: string;
 }
 
 export type PopHostMessagesResponse = SignalingHostConnectionMessage[];
@@ -201,18 +245,25 @@ export const popHostMessages: RequestHandler = async ({ request }) => {
 		}
 	});
 	await rtcKv.connect();
-    const messages: PopHostMessagesResponse = [];
-    const { element: message } = await rtcKv.brPop(`${game}:${roomCode}:${name}:hostMessages`, 8) ?? {};
-    if (message === undefined) {
-        return new Response(JSON.stringify(messages), { status: 200, headers: { 'Content-Type': 'application/json' } });
-    }
-    messages.push(JSON.parse(message));
-    while (true) {
-        const message = await rtcKv.rPop(`${game}:${roomCode}:${name}:hostMessages`);
-        if (message === null) {
-            break;
-        }
-        messages.push(JSON.parse(message));
-    }
-	return new Response(JSON.stringify(messages), { status: 200, headers: { 'Content-Type': 'application/json' } });
+	const messages: PopHostMessagesResponse = [];
+	const { element: message } =
+		(await rtcKv.brPop(`${game}:${roomCode}:${name}:hostMessages`, 8)) ?? {};
+	if (message === undefined) {
+		return new Response(JSON.stringify(messages), {
+			status: 200,
+			headers: { 'Content-Type': 'application/json' }
+		});
+	}
+	messages.push(JSON.parse(message));
+	while (true) {
+		const message = await rtcKv.rPop(`${game}:${roomCode}:${name}:hostMessages`);
+		if (message === null) {
+			break;
+		}
+		messages.push(JSON.parse(message));
+	}
+	return new Response(JSON.stringify(messages), {
+		status: 200,
+		headers: { 'Content-Type': 'application/json' }
+	});
 };

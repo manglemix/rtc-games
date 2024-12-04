@@ -17,10 +17,11 @@ export class HostPeer extends NetworkPeer {
 	private connectingGuests: Record<string, ConnectingGuest> = {};
 
 	public constructor(
+		name: string,
 		public sendToConnectingGuests: (msgs: Record<string, SignalingHostConnectionMessage>) => void,
 		private dataChannelInits: DataChannelInit[]
 	) {
-		super();
+		super(name, name, true);
 	}
 
 	public async acceptGuestConnectionMessages(
@@ -30,7 +31,10 @@ export class HostPeer extends NetworkPeer {
 		for (const msg of msgs) {
 			const guestName = msg.name;
 			const connectingGuest = this.connectingGuests[guestName];
-			if (msg.ice) {
+			if (msg.ice !== undefined) {
+				if (this.isConnectedTo(guestName)) {
+					continue;
+				}
 				if (connectingGuest === undefined) {
 					console.error(`Received ICE from ${guestName} before offer`);
 					continue;
@@ -70,7 +74,7 @@ export class HostPeer extends NetworkPeer {
 				};
 
 				const dataChannels = NetworkPeer.createDataChannels(rtc, this.dataChannelInits, true);
-				rtc.onconnectionstatechange = () => {
+				rtc.onconnectionstatechange = async () => {
 					switch (rtc.connectionState) {
 						case 'new':
 							break;
@@ -79,6 +83,11 @@ export class HostPeer extends NetworkPeer {
 							break;
 						case 'connected':
 							delete this.connectingGuests[guestName];
+							await new Promise<void>((resolve) => {
+								hostRoomChannel.onopen = () => {
+									resolve();
+								};
+							});
 							this.addRtcAsHost(guestName, rtc, dataChannels, hostRoomChannel);
 							break;
 						case 'disconnected':
@@ -105,6 +114,7 @@ export class HostPeer extends NetworkPeer {
 							rtc.addIceCandidate(ice ?? undefined);
 						}
 					};
+					console.log('Accepted offer');
 					const answer = await rtc.createAnswer();
 					rtc.setLocalDescription(answer);
 					return { answer };
@@ -128,9 +138,11 @@ export class HostPeer extends NetworkPeer {
 		hostRoomChannel: RTCDataChannel
 	): void {
 		this.addRtc(peerName, rtc, dataChannels);
+		console.log(`Connected to ${peerName} as host`);
 		this.hostRoomDataChannels[peerName] = hostRoomChannel;
 
 		const connectedPeers = Object.keys(this.hostRoomDataChannels);
+		connectedPeers.push(this.name);
 		for (const dataChannel of Object.values(this.hostRoomDataChannels)) {
 			const msg: RtcHostConnectionMessage = { connectedPeers };
 			dataChannel.send(JSON.stringify(msg));

@@ -1,10 +1,10 @@
 import { sfc32, sfc32StrSeeded, shuffle, Vector2 } from '$lib/index.svelte';
-import type { DataChannelInit, NetworkClient } from '$lib/rtc-client';
 import { SvelteSet } from 'svelte/reactivity';
 import type { Level } from '../levels/level.svelte';
 import { Player, ThisPlayer } from './player.svelte';
 import { goto } from '$app/navigation';
 import { browser } from '$app/environment';
+import type { DataChannelInit, NetworkPeer } from '$lib/rtc';
 
 export const DATA_CHANNELS: DataChannelInit[] = [
 	{
@@ -98,7 +98,7 @@ export abstract class GameState {
 	}
 
 	public get proposer(): Player {
-		return this.getVoteOrderedPlayers()[this.proposerIndex];
+		return this.getVoteOrderedPlayers()[this.proposerIndex]!;
 	}
 
 	public get ending(): Ending | null {
@@ -119,7 +119,7 @@ export abstract class GameState {
 		return Math.min(Math.max(Math.round(PROPOSAL_RATIO * aliveCount), 1), this.players.size);
 	});
 
-	protected netClient: NetworkClient;
+	protected netClient: NetworkPeer;
 	protected syncRng: () => number;
 	protected _stateEndTimeMsecs: number = $state(Date.now());
 	protected _ending: Ending | null = $state(null);
@@ -129,11 +129,11 @@ export abstract class GameState {
 
 	private _state: State = $state(State.FirstInfo);
 	private _proposerIndex = $state(0);
-	private readonly propagatePlayerKinematicsInterval: number;
-	private readonly processPlayerKinematicsInterval: number;
+	private readonly propagatePlayerKinematicsInterval: NodeJS.Timeout;
+	private readonly processPlayerKinematicsInterval: NodeJS.Timeout;
 
 	constructor(
-		netClient: NetworkClient,
+		netClient: NetworkPeer,
 		roomCode: string,
 		public readonly level: Level
 	) {
@@ -151,8 +151,8 @@ export abstract class GameState {
 			this.thisPlayer = new ThisPlayer(
 				level.collisionMaskUrl,
 				netClient.name,
-				level.playerSprites[0],
-				level.playerHalfDimensions[0]
+				level.playerSprites[0]!,
+				level.playerHalfDimensions[0]!
 			);
 			return;
 		}
@@ -161,7 +161,7 @@ export abstract class GameState {
 			const i = this.syncRandInt(0, level.playerSprites.length - 1);
 			this.players.set(
 				peerName,
-				new Player(peerName, level.playerSprites[i], level.playerHalfDimensions[i])
+				new Player(peerName, level.playerSprites[i]!, level.playerHalfDimensions[i]!)
 			);
 		}
 		{
@@ -169,8 +169,8 @@ export abstract class GameState {
 			this.thisPlayer = new ThisPlayer(
 				level.collisionMaskUrl,
 				netClient.name,
-				level.playerSprites[i],
-				level.playerHalfDimensions[i]
+				level.playerSprites[i]!,
+				level.playerHalfDimensions[i]!
 			);
 			this.players.set(netClient.name, this.thisPlayer);
 			$effect(() => {
@@ -186,7 +186,7 @@ export abstract class GameState {
 			const possessed = new Set<Player>();
 
 			while (possessed.size < possessedCount) {
-				const player = ordered[this.syncRandInt(0, ordered.length - 1)];
+				const player = ordered[this.syncRandInt(0, ordered.length - 1)]!;
 				possessed.add(player);
 				player._possessed = true;
 			}
@@ -195,7 +195,7 @@ export abstract class GameState {
 		// Propagate player kinematics at 20fps
 		this.propagatePlayerKinematicsInterval = setInterval(() => {
 			if (this.state === State.Day || this.state === State.Night) {
-				this.netClient.send(
+				this.netClient.broadcast(
 					'player-kinematics',
 					JSON.stringify({
 						origin: this.thisPlayer.origin.toJSON(),
@@ -204,7 +204,7 @@ export abstract class GameState {
 				);
 			}
 		}, 50);
-		netClient.setOnMessage('player-kinematics', (from, msg) => {
+		netClient.addOnMessage('player-kinematics', (from, msg) => {
 			if (this.state !== State.Day && this.state !== State.Night) {
 				return;
 			}
@@ -221,7 +221,7 @@ export abstract class GameState {
 				console.error('Received player kinematics from unknown player: ' + from);
 			}
 		});
-		netClient.setOnMessage('player-state', (from, msg) => {
+		netClient.addOnMessage('player-state', (from, msg) => {
 			const obj: PlayerStateMessage = JSON.parse(msg.data);
 			const player = this.players.get(from);
 			if (player) {
@@ -232,7 +232,7 @@ export abstract class GameState {
 				console.error('Received player kinematics from unknown player: ' + from);
 			}
 		});
-		netClient.setOnMessage('crypt-state', (_from, msg) => {
+		netClient.addOnMessage('crypt-state', (_from, msg) => {
 			const obj: CryptStateMessage = JSON.parse(msg.data);
 			if (obj.addProgress) {
 				this._cryptProgress += obj.addProgress;
@@ -243,17 +243,17 @@ export abstract class GameState {
 				}
 			}
 		});
-		netClient.onGuestDisconnect = (guestName) => {
+		netClient.disconnectedCallback = (guestName) => {
+			if (guestName === netClient.hostName) {
+				netClient.close();
+				this.goto('/hantu');
+			}
 			const player = this.players.get(guestName);
 			if (player) {
 				player.alive = false;
 			} else {
 				console.error('Received disconnect from unknown player: ' + guestName);
 			}
-		};
-		netClient.onHostDisconnect = () => {
-			netClient.close();
-			this.goto('/hantu');
 		};
 		this.processPlayerKinematicsInterval = setInterval(() => {
 			if (this.state === State.Day || this.state === State.Night) {
@@ -265,7 +265,7 @@ export abstract class GameState {
 
 		$effect(() => {
 			if (this.state === State.KeyProposition) {
-				if (this.getVoteOrderedPlayers()[this.proposerIndex].name === this.thisPlayer.name) {
+				if (this.getVoteOrderedPlayers()[this.proposerIndex]!.name === this.thisPlayer.name) {
 					this.sendKeyAction({ propose: { names: Array.from(this.proposals) } });
 				}
 			}
@@ -279,7 +279,7 @@ export abstract class GameState {
 		});
 	}
 
-	public static create(netClient: NetworkClient, roomCode: string, level: Level): GameState {
+	public static create(netClient: NetworkPeer, roomCode: string, level: Level): GameState {
 		if (!browser) {
 			return new NoopGameState(netClient, roomCode, level);
 		}
@@ -303,10 +303,10 @@ export abstract class GameState {
 	public getVoteOrderedPlayers(): Player[] {
 		const players = this.getNetworkOrderedPlayers().filter((player) => player.alive);
 		const rng = sfc32(
-			this.voteOrderSeed[0],
-			this.voteOrderSeed[1],
-			this.voteOrderSeed[2],
-			this.voteOrderSeed[3]
+			this.voteOrderSeed[0]!,
+			this.voteOrderSeed[1]!,
+			this.voteOrderSeed[2]!,
+			this.voteOrderSeed[3]!
 		);
 		shuffle(players, rng);
 		return players;
@@ -384,24 +384,24 @@ export abstract class GameState {
 			console.error('Only the host can send game state messages');
 			return;
 		}
-		this.netClient.send('game-state', JSON.stringify(msg));
+		this.netClient.broadcast('game-state', JSON.stringify(msg));
 	}
 
 	protected sendKeyAction(msg: KeyActionMessage) {
-		this.netClient.send('key-action', JSON.stringify(msg));
+		this.netClient.broadcast('key-action', JSON.stringify(msg));
 	}
 
 	protected sendPlayerState(msg: PlayerStateMessage) {
-		this.netClient.send('player-state', JSON.stringify(msg));
+		this.netClient.broadcast('player-state', JSON.stringify(msg));
 	}
 
 	protected sendCryptState(msg: CryptStateMessage) {
-		this.netClient.send('crypt-state', JSON.stringify(msg));
+		this.netClient.broadcast('crypt-state', JSON.stringify(msg));
 	}
 }
 
 export class HostGameState extends GameState {
-	private stateTimeoutId: number | null;
+	private stateTimeoutId: NodeJS.Timeout | null;
 	public skipTimer: () => void = () => {};
 
 	protected setState(newState: State): boolean {
@@ -423,7 +423,7 @@ export class HostGameState extends GameState {
 
 				const players = Array.from(this.players.values());
 				while (this.proposals.size < this.requiredProposals) {
-					this.proposals.add(players[Math.floor(Math.random() * players.length)].name);
+					this.proposals.add(players[Math.floor(Math.random() * players.length)]!.name);
 				}
 
 				this.sendGameState({
@@ -451,7 +451,7 @@ export class HostGameState extends GameState {
 
 				const players2 = Array.from(this.players.values());
 				while (this.proposals.size < this.requiredProposals) {
-					this.proposals.add(players2[Math.floor(Math.random() * players2.length)].name);
+					this.proposals.add(players2[Math.floor(Math.random() * players2.length)]!.name);
 				}
 
 				this.sendGameState({ enterForcedKeyVoteResults: {}, endTimeMsecs });
@@ -511,10 +511,10 @@ export class HostGameState extends GameState {
 		return true;
 	}
 
-	public constructor(netClient: NetworkClient, roomCode: string, level: Level) {
+	public constructor(netClient: NetworkPeer, roomCode: string, level: Level) {
 		super(netClient, roomCode, level);
 
-		netClient.setOnMessage('key-action', (from, msg) => {
+		netClient.addOnMessage('key-action', (from, msg) => {
 			const obj: KeyActionMessage = JSON.parse(msg.data);
 			// Skip timer when all players have voted if another player just voted
 			if (obj.vote) {
@@ -659,10 +659,11 @@ export class HostGameState extends GameState {
 class GuestGameState extends GameState {
 	private gameStarted: () => void = () => {};
 
-	constructor(netClient: NetworkClient, roomCode: string, level: Level) {
+	constructor(netClient: NetworkPeer, roomCode: string, level: Level) {
 		super(netClient, roomCode, level);
 
-		netClient.setOnMessage('game-state', (from, msg) => {
+		netClient.clearOnMessageForChannel('game-state');
+		netClient.addOnMessage('game-state', (from, msg) => {
 			if (from !== netClient.hostName) {
 				console.error('Received game state message from non-host: ' + from);
 				return;
@@ -712,7 +713,7 @@ class GuestGameState extends GameState {
 			}
 		});
 
-		netClient.setOnMessage('key-action', (from, msg) => {
+		netClient.addOnMessage('key-action', (from, msg) => {
 			const obj: KeyActionMessage = JSON.parse(msg.data);
 			if (obj.vote) {
 				const player = this.players.get(from);

@@ -134,7 +134,7 @@ export class ThisPlayer extends Player {
 				}
 			}
 			const px = this.collisionMask.getPixelXY(Math.round(toCheck.x), Math.round(toCheck.y));
-			const newLayer = px[3] === 0 ? 0 : px[0];
+			const newLayer = px[3] === 0 ? 0 : px[0]!;
 			const newAreaType = px[1] as AreaType;
 
 			if (newAreaType === AreaType.Crypt && !this.isKeyHolder) {

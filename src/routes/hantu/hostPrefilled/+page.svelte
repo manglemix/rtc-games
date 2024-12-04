@@ -2,14 +2,6 @@
 	import Background from '$lib/hantu/Background.svelte';
 	import { DATA_CHANNELS, type GameStateMessage } from '$lib/hantu/logic/game-state.svelte';
 	import Game from '$lib/hantu/Game.svelte';
-	import { createRoomCode, NetworkClient } from '$lib/rtc-client';
-	import {
-		defaultAcceptOffers,
-		defaultAdvertise,
-		defaultClearAdvertise,
-		defaultConnectToRoom,
-		defaultUploadAnswer
-	} from '$lib/rtc-defaults';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { goto } from '$app/navigation';
 	import { onDestroy, onMount } from 'svelte';

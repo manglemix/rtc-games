@@ -4,20 +4,22 @@
 	import Game from '$lib/hantu/Game.svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { onDestroy, onMount } from 'svelte';
+	import type { NetworkPeer } from '$lib/rtc';
+	import { createRoom, joinRoom } from '$lib/rtc-defaults';
 
-	let netClient: NetworkClient | null = $state(null);
+	let closeRoom: (() => void) | null = null;
+	let netClient: NetworkPeer | null = $state(null);
 	let onMainMenu = $state(true);
 	let botIndex = 0;
-	let bots: NetworkClient[] = $state([]);
+	let bots: NetworkPeer[] = $state([]);
 	let name = $state('');
 	let isHost = $state(false);
 	let roomCode = $state('');
 	let joining = $state(false);
-	let acceptInterval: number | null = null;
 	let peerNames: SvelteSet<string> = $state(new SvelteSet());
 
 	function isNameValid() {
-		return name.length > 3 && name.length <= 12 && name.match(/^[a-zA-Z0-9]+$/);
+		return name.length > 1 && name.length <= 12 && name.match(/^[a-zA-Z0-9]+$/);
 	}
 
 	onMount(() => {
@@ -29,9 +31,6 @@
 	onDestroy(() => {
 		if (netClient) {
 			netClient.close();
-		}
-		if (acceptInterval) {
-			clearInterval(acceptInterval);
 		}
 	});
 </script>
@@ -71,67 +70,52 @@
 				{/each}
 				<button
 					onclick={() => {
-						defaultClearAdvertise('hantu', roomCode);
-						clearInterval(acceptInterval!);
-						acceptInterval = null;
+						closeRoom!();
 						onMainMenu = false;
-						netClient!.onConnection = (newPeerName) => {
+						netClient!.connectedCallback = (newPeerName) => {
 							console.error('Unexpected connection from', newPeerName);
 						};
-						netClient!.onGuestDisconnect = (peerName) => {
+						netClient!.disconnectedCallback = (peerName) => {
 							peerNames.delete(peerName);
 						};
 					}}>Start Game</button
 				>
 				<button
 					onclick={() => {
+						closeRoom!();
 						roomCode = '';
-						netClient!.onGuestDisconnect = () => {};
+						netClient!.disconnectedCallback = () => {};
 						netClient!.close();
 						netClient = null;
-						clearInterval(acceptInterval!);
-						acceptInterval = null;
 					}}>Close Room</button
 				>
 				<button
 					onclick={async () => {
-						const newNetClient = await defaultConnectToRoom(
-							'hantu',
-							roomCode,
-							`bot${botIndex++}`,
-							DATA_CHANNELS
-						);
-						if (newNetClient === null) {
+						const tmp = await joinRoom('hantu', `bot${botIndex++}`, roomCode, DATA_CHANNELS);
+						if (tmp === null) {
 							console.error('Failed to connect to room as bot');
 							return;
 						}
-						bots.push(newNetClient);
+						bots.push(tmp.peer);
 					}}>Add Bot</button
 				>
 			{:else}
 				<button
-					onclick={() => {
+					onclick={async () => {
 						if (!isNameValid()) {
 							alert('Please enter a valid name');
 							return;
 						}
-						roomCode = createRoomCode();
-						netClient = NetworkClient.createRoom(
-							name,
-							DATA_CHANNELS,
-							defaultUploadAnswer('hantu', roomCode)
-						);
-						const advertise = defaultAdvertise('hantu', roomCode);
-						advertise(netClient.advertiseAsHost());
-						netClient.onConnection = (newPeerName) => {
+						const tmp = await createRoom('hantu', name, DATA_CHANNELS);
+						roomCode = tmp.roomCode;
+						netClient = tmp.peer;
+						closeRoom = tmp.closeRoom;
+						netClient.connectedCallback = (newPeerName) => {
 							peerNames.add(newPeerName);
-							advertise(netClient!.advertiseAsHost());
 						};
-						netClient.onGuestDisconnect = (peerName) => {
+						netClient.disconnectedCallback = (peerName) => {
 							peerNames.delete(peerName);
-							advertise(netClient!.advertiseAsHost());
 						};
-						acceptInterval = defaultAcceptOffers('hantu', roomCode, netClient);
 					}}>Create Game</button
 				>
 			{/if}
@@ -167,24 +151,25 @@
 						return;
 					}
 					joining = true;
-					netClient = await defaultConnectToRoom('hantu', roomCode, name, DATA_CHANNELS);
+					const tmp = await joinRoom('hantu', name, roomCode, DATA_CHANNELS);
 					joining = false;
-					if (netClient === null) {
+					if (tmp === null) {
 						alert('Failed to join game');
 						return;
 					}
+					netClient = tmp.peer;
 					peerNames = new SvelteSet(netClient.getPeerNames());
-					netClient.onConnection = (newPeerName) => {
+					netClient.connectedCallback = (newPeerName) => {
 						peerNames.add(newPeerName);
 					};
-					netClient.onGuestDisconnect = (peerName) => {
+					netClient.disconnectedCallback = (peerName) => {
+						if (peerName === tmp.hostName) {
+							netClient!.close();
+							netClient = null;
+						}
 						peerNames.delete(peerName);
 					};
-					netClient.onHostDisconnect = () => {
-						netClient!.close();
-						netClient = null;
-					};
-					netClient.setOnMessage('game-state', (_from, message) => {
+					netClient.addOnMessage('game-state', (_from, message) => {
 						const obj: GameStateMessage = JSON.parse(message.data);
 						if (obj.startGame) {
 							onMainMenu = false;

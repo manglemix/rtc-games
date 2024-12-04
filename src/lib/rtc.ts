@@ -52,7 +52,11 @@ export abstract class NetworkPeer {
 	public connectedCallback: (peerName: string) => void = () => {};
 	public disconnectedCallback: (peerName: string) => void = () => {};
 
-	// protected constructor(protected rtc: RTCPeerConnection) { }
+	protected constructor(
+		public readonly name: string,
+		public readonly hostName: string,
+		public readonly isHost: boolean
+	) {}
 
 	public getOnMessagesForPeer(peerName: string): Record<string, ((msg: MessageEvent) => void)[]> {
 		if (this.onMessage[peerName] === undefined) {
@@ -73,14 +77,34 @@ export abstract class NetworkPeer {
 		channelName: string,
 		handler: (msg: MessageEvent) => void
 	): void {
-		this.getOnMessagesForPeer(peerName)[channelName]!.push(handler);
+		const channelHandlers = this.getOnMessagesForPeer(peerName);
+		if (channelHandlers[channelName] === undefined) {
+			channelHandlers[channelName] = [];
+		}
+		channelHandlers[channelName].push(handler);
+	}
+
+	public addOnMessage(
+		channelName: string,
+		handler: (from: string, msg: MessageEvent) => void
+	): void {
+		for (const peerName of Object.keys(this.onMessage)) {
+			this.addOnMessageForPeer(peerName, channelName, (msg) => handler(peerName, msg));
+		}
+	}
+
+	public clearOnMessageForChannel(channelName: string): void {
+		for (const peerName of Object.keys(this.onMessage)) {
+			const channelHandlers = this.getOnMessagesForPeer(peerName);
+			delete channelHandlers[channelName];
+		}
 	}
 
 	public clearOnMessagesForPeer(peerName: string): void {
 		this.setOnMessagesForPeer(peerName, {});
 	}
 
-	public broadcast(msg: string, channelName: string): void {
+	public broadcast(channelName: string, msg: string): void {
 		for (const peerName in this.dataChannels) {
 			this.sendTo(peerName, msg, channelName);
 		}
@@ -112,6 +136,15 @@ export abstract class NetworkPeer {
 		return Object.keys(this.rtcConnections);
 	}
 
+	public close(): void {
+		for (const rtc of Object.values(this.rtcConnections)) {
+			rtc.close();
+		}
+		this.rtcConnections = {};
+		this.dataChannels = {};
+		this.onMessage = {};
+	}
+
 	protected disconnectFrom(peerName: string): void {
 		const rtc = this.rtcConnections[peerName];
 		if (rtc === undefined) {
@@ -137,6 +170,7 @@ export abstract class NetworkPeer {
 				case 'closed':
 				case 'disconnected':
 					this.onPeerDisconnect(peerName);
+					rtc.onconnectionstatechange = () => {};
 					break;
 				case 'new':
 				case 'connecting':
@@ -150,11 +184,15 @@ export abstract class NetworkPeer {
 		};
 		for (const [channelName, channel] of Object.entries(dataChannels)) {
 			channel.onmessage = (msg) => {
-				this.getOnMessagesForPeer(peerName)[channelName]!.forEach((handler) => handler(msg));
+				const messageHandlers = this.getOnMessagesForPeer(peerName)[channelName];
+				if (messageHandlers !== undefined) {
+					messageHandlers.forEach((handler) => handler(msg));
+				}
 			};
 		}
 		this.dataChannels[peerName] = dataChannels;
 		this.rtcConnections[peerName] = rtc;
+		console.log(this.rtcConnections);
 		this.connectedCallback(peerName);
 	}
 
@@ -179,7 +217,8 @@ export abstract class NetworkPeer {
 
 	protected onPeerDisconnect(peerName: string): void {
 		// Retain onMessage handlers for reconnection
-		console.log(`RTC connection to ${peerName} disconnected`);
+		console.log(`RTC connection to ${peerName} disconnected from ${this.name}`);
+		console.log(this.rtcConnections);
 		delete this.dataChannels[peerName];
 		delete this.rtcConnections[peerName];
 		this.disconnectedCallback(peerName);

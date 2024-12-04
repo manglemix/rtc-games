@@ -1,12 +1,12 @@
-import type { NetworkClient } from '$lib/rtc-client';
+import type { NetworkPeer } from '$lib/rtc';
 import type { Level } from '../levels/level.svelte';
 import { GameState, State, type GameStateMessage } from './game-state.svelte';
 
-export function runBot(netClient: NetworkClient, roomCode: string, level: Level) {
+export function runBot(netClient: NetworkPeer, roomCode: string, level: Level) {
 	runBotPrivate(netClient, roomCode, level).catch(console.error);
 }
 
-async function runBotPrivate(netClient: NetworkClient, roomCode: string, level: Level) {
+async function runBotPrivate(netClient: NetworkPeer, roomCode: string, level: Level) {
 	const gameState = GameState.create(netClient, roomCode, level);
 	// Stop bot from changing the url
 	gameState.goto = () => new Promise(() => {});

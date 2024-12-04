@@ -45,7 +45,7 @@ export function cyrb128(str: string) {
 
 export function sfc32StrSeeded(str: string) {
 	var seed = cyrb128(str);
-	return sfc32(seed[0], seed[1], seed[2], seed[3]);
+	return sfc32(seed[0]!, seed[1]!, seed[2]!, seed[3]!);
 }
 /**
  * An RNG that doesn't produce duplicates for the first 2^32 numbers
