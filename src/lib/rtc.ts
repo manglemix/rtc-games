@@ -136,7 +136,7 @@ export abstract class NetworkPeer {
 					console.error('RTC connection failed, treating as disconnect...');
 				case 'closed':
 				case 'disconnected':
-                    this.onPeerDisconnect(peerName);
+					this.onPeerDisconnect(peerName);
 					break;
 				case 'new':
 				case 'connecting':
@@ -177,13 +177,13 @@ export abstract class NetworkPeer {
 		return dataChannels;
 	}
 
-    protected onPeerDisconnect(peerName: string): void {
-        // Retain onMessage handlers for reconnection
-        console.log(`RTC connection to ${peerName} disconnected`);
-        delete this.dataChannels[peerName];
-        delete this.rtcConnections[peerName];
-        this.disconnectedCallback(peerName);
-    }
+	protected onPeerDisconnect(peerName: string): void {
+		// Retain onMessage handlers for reconnection
+		console.log(`RTC connection to ${peerName} disconnected`);
+		delete this.dataChannels[peerName];
+		delete this.rtcConnections[peerName];
+		this.disconnectedCallback(peerName);
+	}
 }
 
 export interface SignalingHostConnectionMessage {
@@ -196,28 +196,28 @@ export interface SignalingGuestConnectionMessage {
 	// It is worthwhile to send `null` instead of omitting the field, because `null` represents ICE gathering completion
 	readonly ice?: RTCIceCandidate | null;
 	readonly offer?: RTCSessionDescriptionInit;
-    readonly name: string;
+	readonly name: string;
 }
 
 export interface RtcHostConnectionMessage {
-    readonly connectedPeers?: string[];
-    readonly ice?: {
-        candidate: RTCIceCandidate | null;
-        from: string;
-    };
-    readonly offer?: {
-        sdp: RTCSessionDescriptionInit;
-        from: string;
-    };
-    readonly answer?: {
-        sdp: RTCSessionDescriptionInit;
-        from: string;
-    };
+	readonly connectedPeers?: string[];
+	readonly ice?: {
+		candidate: RTCIceCandidate | null;
+		from: string;
+	};
+	readonly offer?: {
+		sdp: RTCSessionDescriptionInit;
+		from: string;
+	};
+	readonly answer?: {
+		sdp: RTCSessionDescriptionInit;
+		from: string;
+	};
 }
 
 export interface RtcGuestConnectionMessage {
-    readonly ice?: RTCIceCandidate | null;
-    readonly offer?: RTCSessionDescriptionInit;
-    readonly answer?: RTCSessionDescriptionInit;
-    readonly recipient: string;
+	readonly ice?: RTCIceCandidate | null;
+	readonly offer?: RTCSessionDescriptionInit;
+	readonly answer?: RTCSessionDescriptionInit;
+	readonly recipient: string;
 }
