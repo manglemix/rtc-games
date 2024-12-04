@@ -5,28 +5,28 @@ class NetworkPeer {
 	private rtc: RTCPeerConnection = new RTCPeerConnection({
 		iceServers: [
 			{
-			  urls: "stun:stun.relay.metered.ca:80",
+				urls: 'stun:stun.relay.metered.ca:80'
 			},
 			{
-			  urls: "turn:global.relay.metered.ca:80",
-			  username: "03f299ccbd35840a927a7012",
-			  credential: "cfJhlf3VwrROlRif",
+				urls: 'turn:global.relay.metered.ca:80',
+				username: '03f299ccbd35840a927a7012',
+				credential: 'cfJhlf3VwrROlRif'
 			},
 			{
-			  urls: "turn:global.relay.metered.ca:80?transport=tcp",
-			  username: "03f299ccbd35840a927a7012",
-			  credential: "cfJhlf3VwrROlRif",
+				urls: 'turn:global.relay.metered.ca:80?transport=tcp',
+				username: '03f299ccbd35840a927a7012',
+				credential: 'cfJhlf3VwrROlRif'
 			},
 			{
-			  urls: "turn:global.relay.metered.ca:443",
-			  username: "03f299ccbd35840a927a7012",
-			  credential: "cfJhlf3VwrROlRif",
+				urls: 'turn:global.relay.metered.ca:443',
+				username: '03f299ccbd35840a927a7012',
+				credential: 'cfJhlf3VwrROlRif'
 			},
 			{
-			  urls: "turns:global.relay.metered.ca:443?transport=tcp",
-			  username: "03f299ccbd35840a927a7012",
-			  credential: "cfJhlf3VwrROlRif",
-			},
+				urls: 'turns:global.relay.metered.ca:443?transport=tcp',
+				username: '03f299ccbd35840a927a7012',
+				credential: 'cfJhlf3VwrROlRif'
+			}
 		]
 	});
 	private rtcConnChannel: RTCDataChannel | null = null;

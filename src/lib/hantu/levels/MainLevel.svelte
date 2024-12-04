@@ -6,7 +6,7 @@
 	import Player from '../ui/Player.svelte';
 	import { AreaType } from './level.svelte';
 	import CryptFixes from '../ui/crypt/CryptFixes.svelte';
-	import Vignette from '$lib/hantu/vignette/Vignette.svelte';
+	import Vignette from '$lib/vignette/Vignette.svelte';
 
 	const gameState: GameState = getContext('gameState');
 	let windowWidth = $state(0);

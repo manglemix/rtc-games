@@ -148,7 +148,12 @@ export abstract class GameState {
 		if (!browser) {
 			this.propagatePlayerKinematicsInterval = setInterval(() => {}, 50);
 			this.processPlayerKinematicsInterval = setInterval(() => {}, 16);
-			this.thisPlayer = new ThisPlayer(level.collisionMaskUrl, netClient.name, level.playerSprites[0], level.playerHalfDimensions[0]);
+			this.thisPlayer = new ThisPlayer(
+				level.collisionMaskUrl,
+				netClient.name,
+				level.playerSprites[0],
+				level.playerHalfDimensions[0]
+			);
 			return;
 		}
 
@@ -723,6 +728,4 @@ class GuestGameState extends GameState {
 	}
 }
 
-class NoopGameState extends GameState {
-
-}
+class NoopGameState extends GameState {}
