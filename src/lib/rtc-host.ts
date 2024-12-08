@@ -1,145 +1,116 @@
 import {
 	NetworkPeer,
 	rtcConfig,
-	type DataChannelInit,
+	type DataChannelInits,
+	type QueryResponse,
 	type RtcGuestConnectionMessage,
 	type RtcHostConnectionMessage,
 	type SignalingGuestConnectionMessage,
 	type SignalingHostConnectionMessage
 } from './rtc';
 
-interface ConnectingGuest {
-	provideIce: (ice: RTCIceCandidate | null) => void;
-}
 
 export class HostPeer extends NetworkPeer {
 	private hostRoomDataChannels: Record<string, RTCDataChannel> = {};
-	private connectingGuests: Record<string, ConnectingGuest> = {};
+	private onQuery?: (peerName: string, response: QueryResponse) => void;
 
 	public constructor(
 		name: string,
 		public sendToConnectingGuests: (msgs: Record<string, SignalingHostConnectionMessage>) => void,
-		private dataChannelInits: DataChannelInit[]
+		dataChannelInits: DataChannelInits
 	) {
-		super(name, name, true);
+		super(name, name, true, dataChannelInits);
+		this.onIceCandidate = (peerName, ice) => {
+			this.sendToConnectingGuests({ [peerName]: { ice } });
+		}
+		this.onSdp = (peerName, answer) => {
+			if (answer.type !== 'answer') {
+				console.error(`Expected answer, got ${answer.type}`);
+				return;
+			}
+			this.sendToConnectingGuests({ [peerName]: { answer } });
+		}
 	}
 
-	public async acceptGuestConnectionMessages(
+	public acceptGuestConnectionMessages(
 		msgs: SignalingGuestConnectionMessage[]
-	): Promise<void> {
-		const tasks: Record<string, Promise<SignalingHostConnectionMessage>> = {};
+	): void {
 		for (const msg of msgs) {
-			const guestName = msg.name;
-			const connectingGuest = this.connectingGuests[guestName];
-			if (msg.ice !== undefined) {
-				if (this.isConnectedTo(guestName)) {
-					continue;
-				}
-				if (connectingGuest === undefined) {
-					console.error(`Received ICE from ${guestName} before offer`);
-					continue;
-				}
-				connectingGuest.provideIce(msg.ice);
+			if (msg.ice) {
+				this.addIceCandidate(msg.from, msg.ice);
 			} else if (msg.offer) {
-				if (connectingGuest !== undefined) {
-					console.error(`${guestName} is already connecting`);
-					continue;
-				}
-				const rtc = new RTCPeerConnection(rtcConfig);
-				const hostRoomChannel = rtc.createDataChannel('host-room', {
-					negotiated: true,
-					id: 0,
-					ordered: true
-				});
-
-				hostRoomChannel.onmessage = (msg) => {
-					const obj: RtcGuestConnectionMessage = JSON.parse(msg.data);
-					const dataChannel = this.hostRoomDataChannels[obj.recipient];
-					if (dataChannel === undefined) {
-						console.error(`No data channel to ${obj.recipient} (requested by ${guestName})`);
-						return;
-					}
-					let hostMsg: RtcHostConnectionMessage;
-					if (obj.ice !== undefined) {
-						hostMsg = { ice: { candidate: obj.ice, from: guestName } };
-					} else if (obj.offer) {
-						hostMsg = { offer: { sdp: obj.offer, from: guestName } };
-					} else if (obj.answer) {
-						hostMsg = { answer: { sdp: obj.answer, from: guestName } };
-					} else {
-						console.error(`Unknown message from ${guestName}: ${obj}`);
-						return;
-					}
-					dataChannel.send(JSON.stringify(hostMsg));
-				};
-
-				const dataChannels = NetworkPeer.createDataChannels(rtc, this.dataChannelInits, true);
-				rtc.onconnectionstatechange = async () => {
-					switch (rtc.connectionState) {
-						case 'new':
-							break;
-						case 'connecting':
-							this.connectingCallback(guestName);
-							break;
-						case 'connected':
-							delete this.connectingGuests[guestName];
-							await new Promise<void>((resolve) => {
-								hostRoomChannel.onopen = () => {
-									resolve();
-								};
-							});
-							this.addRtcAsHost(guestName, rtc, dataChannels, hostRoomChannel);
-							break;
-						case 'disconnected':
-						case 'closed':
-						case 'failed':
-							delete this.connectingGuests[guestName];
-							break;
-						default:
-							delete this.connectingGuests[guestName];
-							console.error(`Unknown connection state: ${rtc.connectionState} from ${guestName}`);
-							break;
-					}
-				};
-				rtc.onicecandidate = ({ candidate }) => {
-					const outMsg: Record<string, SignalingHostConnectionMessage> = {};
-					outMsg[guestName] = { ice: candidate };
-					this.sendToConnectingGuests(outMsg);
-				};
-				const sdp = msg.offer;
-				const task = async () => {
-					await rtc.setRemoteDescription(sdp);
-					this.connectingGuests[guestName] = {
-						provideIce: (ice) => {
-							rtc.addIceCandidate(ice ?? undefined);
-						}
-					};
-					console.log('Accepted offer');
-					const answer = await rtc.createAnswer();
-					rtc.setLocalDescription(answer);
-					return { answer };
-				};
-				tasks[guestName] = task();
-			} else {
-				console.warn(`Empty message from guest ${guestName}`);
+				this.addSdp(msg.from, msg.offer);
 			}
 		}
-		const outMsgs: Record<string, SignalingHostConnectionMessage> = {};
-		for (const [guestName, task] of Object.entries(tasks)) {
-			outMsgs[guestName] = await task;
+	}
+	public async queryReadiness(): Promise<boolean> {
+		if (this.onQuery) {
+			console.error('Query already in progress');
+			return false;
 		}
-		this.sendToConnectingGuests(outMsgs);
+		
+		return await new Promise((resolve) => {
+			const handled = Object.fromEntries(this.getPeerNames().map((name) => [name, false]));
+			this.onQuery = (peerName, response) => {
+				if (response.query === "connectedPeers") {
+					const expectedConnected = new Set(this.getPeerNames());
+					const actualConnected = new Set(response.connectedPeers);
+
+					if (expectedConnected.size !== actualConnected.size) {
+						this.onQuery = undefined;
+						resolve(false);
+						return;
+					}
+
+					for (const name of expectedConnected) {
+						if (!actualConnected.has(name)) {
+							this.onQuery = undefined;
+							resolve(false);
+							return;
+						}
+					}
+
+					handled[peerName] = true;
+
+					if (Object.values(handled).every((v) => v)) {
+						this.onQuery = undefined;
+						resolve(true);
+					}
+				}
+			};
+			
+		});
 	}
 
-	private addRtcAsHost(
-		peerName: string,
-		rtc: RTCPeerConnection,
-		dataChannels: Record<string, RTCDataChannel>,
-		hostRoomChannel: RTCDataChannel
-	): void {
-		this.addRtc(peerName, rtc, dataChannels);
-		console.log(`Connected to ${peerName} as host`);
+	protected async addRtc(peerName: string, rtc: RTCPeerConnection, dataChannels: Record<string, RTCDataChannel>): Promise<void> {
+		super.addRtc(peerName, rtc, dataChannels);
+		const hostRoomChannel = dataChannels["host-room"]!;
 		this.hostRoomDataChannels[peerName] = hostRoomChannel;
+
+		hostRoomChannel.onmessage = (msg) => {
+			const obj: RtcGuestConnectionMessage = JSON.parse(msg.data);
+			const dataChannel = this.hostRoomDataChannels[obj.recipient];
+			if (dataChannel === undefined) {
+				console.error(`No data channel to ${obj.recipient} (requested by ${peerName})`);
+				return;
+			}
+			let hostMsg: RtcHostConnectionMessage;
+			if (obj.ice !== undefined) {
+				hostMsg = { ice: { candidate: obj.ice, from: peerName } };
+			} else if (obj.sdp) {
+				hostMsg = { sdp: { sdp: obj.sdp, from: peerName } };
+			} else {
+				console.error(`Unknown message from ${peerName}: ${obj}`);
+				return;
+			}
+			dataChannel.send(JSON.stringify(hostMsg));
+		};
+
+		if (hostRoomChannel.readyState !== 'open') {
+			await new Promise((resolve) => {
+				hostRoomChannel.onopen = resolve;
+			});
+		}
 
 		const connectedPeers = Object.keys(this.hostRoomDataChannels);
 		connectedPeers.push(this.name);

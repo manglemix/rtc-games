@@ -1,5 +1,6 @@
 import type {
 	DataChannelInit,
+	DataChannelInits,
 	SignalingGuestConnectionMessage,
 	SignalingHostConnectionMessage
 } from './rtc';
@@ -119,7 +120,7 @@ export function fetchPopHostMessages(
 export async function createRoom(
 	game: string,
 	hostName: string,
-	dataChannelInits: DataChannelInit[]
+	dataChannelInits: DataChannelInits
 ): Promise<{
 	peer: HostPeer;
 	roomCode: string;
@@ -162,22 +163,25 @@ export async function joinRoom(
 	game: string,
 	name: string,
 	roomCode: string,
-	dataChannelInits: DataChannelInit[]
+	dataChannelInits: DataChannelInits
 ): Promise<{ peer: GuestPeer; hostName: string } | null> {
 	const hostName = await fetchGetHostName(game, roomCode);
 	if (hostName === null) {
 		return null;
 	}
+	const aborter = new AbortController();
+	const signal = aborter.signal;
 	const { fromHost, onConnection } = GuestPeer.connectToRoom(
 		hostName,
 		name,
 		dataChannelInits,
 		(msg) => {
+			if (signal.aborted) {
+				return;
+			}
 			fetchPushGuestMessage(game, roomCode, msg);
 		}
 	);
-	const aborter = new AbortController();
-	const signal = aborter.signal;
 
 	const task = async () => {
 		while (!aborter.signal.aborted) {

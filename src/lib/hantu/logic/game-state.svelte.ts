@@ -4,28 +4,20 @@ import type { Level } from '../levels/level.svelte';
 import { Player, ThisPlayer } from './player.svelte';
 import { goto } from '$app/navigation';
 import { browser } from '$app/environment';
-import type { DataChannelInit, NetworkPeer } from '$lib/rtc';
+import type { DataChannelInits, NetworkPeer } from '$lib/rtc';
 
-export const DATA_CHANNELS: DataChannelInit[] = [
-	{
-		label: 'game-state',
+export const DATA_CHANNELS: DataChannelInits = {
+	"game-state": {
 		hostOnly: true
 	},
-	{
-		label: 'key-action'
-	},
-	{
-		label: 'player-kinematics',
+	"key-action": {},
+	"player-kinematics": {
 		ordered: false,
 		maxRetransmits: 0
 	},
-	{
-		label: 'player-state'
-	},
-	{
-		label: 'crypt-state'
-	}
-];
+	"player-state": {},
+	"crypt-state": {}
+};
 
 export enum Ending {
 	Exorcist,

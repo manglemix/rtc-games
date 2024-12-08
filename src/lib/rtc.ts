@@ -1,5 +1,4 @@
 export interface DataChannelInit {
-	label: string;
 	hostOnly?: boolean;
 	maxPacketLifeTime?: number;
 	maxRetransmits?: number;
@@ -35,11 +34,18 @@ export let rtcConfig = {
 	]
 };
 
+export type DataChannelInits = Record<string, DataChannelInit>;
+
+interface ConnectingPeer {
+	rtc: RTCPeerConnection;
+	dataChannels: Record<string, RTCDataChannel>;
+}
+
 export abstract class NetworkPeer {
 	/**
-	 * A map of event handlers for each peer name.
+	 * A map of event handlers for each channel.
 	 */
-	public onMessage: Record<string, Record<string, ((msg: MessageEvent) => void)[]>> = {};
+	public onMessage: Record<string, ((from: string, msg: MessageEvent) => void)[]> = {};
 
 	/**
 	 * A map of named data channels for each peer name.
@@ -48,61 +54,38 @@ export abstract class NetworkPeer {
 
 	private rtcConnections: Record<string, RTCPeerConnection> = {};
 
+	private connectingPeers: Record<string, ConnectingPeer> = {};
+
 	public connectingCallback: (peerName: string) => void = () => {};
 	public connectedCallback: (peerName: string) => void = () => {};
 	public disconnectedCallback: (peerName: string) => void = () => {};
 
+	protected onIceCandidate: (peerName: string, ice: RTCIceCandidate | null) => void = () => {};
+	protected onSdp: (peerName: string, sdp: RTCSessionDescriptionInit) => void = () => {};
+
 	protected constructor(
 		public readonly name: string,
 		public readonly hostName: string,
-		public readonly isHost: boolean
+		public readonly isHost: boolean,
+		public readonly dataChannelInits: DataChannelInits
 	) {}
-
-	public getOnMessagesForPeer(peerName: string): Record<string, ((msg: MessageEvent) => void)[]> {
-		if (this.onMessage[peerName] === undefined) {
-			this.onMessage[peerName] = {};
-		}
-		return this.onMessage[peerName];
-	}
-
-	public setOnMessagesForPeer(
-		peerName: string,
-		handlers: Record<string, ((msg: MessageEvent) => void)[]>
-	): void {
-		this.onMessage[peerName] = handlers;
-	}
-
-	public addOnMessageForPeer(
-		peerName: string,
-		channelName: string,
-		handler: (msg: MessageEvent) => void
-	): void {
-		const channelHandlers = this.getOnMessagesForPeer(peerName);
-		if (channelHandlers[channelName] === undefined) {
-			channelHandlers[channelName] = [];
-		}
-		channelHandlers[channelName].push(handler);
-	}
 
 	public addOnMessage(
 		channelName: string,
 		handler: (from: string, msg: MessageEvent) => void
 	): void {
-		for (const peerName of Object.keys(this.onMessage)) {
-			this.addOnMessageForPeer(peerName, channelName, (msg) => handler(peerName, msg));
+		const messageHandlers = this.onMessage[channelName];
+		if (messageHandlers === undefined) {
+			this.onMessage[channelName] = [handler];
+		} else {
+			messageHandlers.push(handler);
 		}
 	}
 
 	public clearOnMessageForChannel(channelName: string): void {
-		for (const peerName of Object.keys(this.onMessage)) {
-			const channelHandlers = this.getOnMessagesForPeer(peerName);
-			delete channelHandlers[channelName];
-		}
+		delete this.onMessage[channelName];
 	}
 
-	public clearOnMessagesForPeer(peerName: string): void {
-		this.setOnMessagesForPeer(peerName, {});
-	}
 
 	public broadcast(channelName: string, msg: string): void {
 		for (const peerName in this.dataChannels) {
@@ -145,6 +128,73 @@ export abstract class NetworkPeer {
 		this.onMessage = {};
 	}
 
+	private getConnectingPeer(peerName: string): ConnectingPeer | null {
+		if (this.connectingPeers[peerName] === undefined) {
+			if (this.rtcConnections[peerName] !== undefined) {
+				console.error(`Already connected to ${peerName}`);
+				return null;
+			}
+			const rtc = new RTCPeerConnection(rtcConfig);
+			const dataChannels = NetworkPeer.createDataChannels(rtc, this.dataChannelInits, this.isHost || peerName === this.hostName);
+			this.connectingPeers[peerName] = {
+				rtc,
+				dataChannels
+			};
+
+			rtc.onicecandidate = ({ candidate }) => {
+				this.onIceCandidate(peerName, candidate);
+			};
+
+			rtc.onconnectionstatechange = () => {
+				switch (rtc.connectionState) {
+					case 'new':
+					case 'connecting':
+						break;
+					case 'connected':
+						delete this.connectingPeers[peerName];
+						this.addRtc(peerName, rtc, dataChannels);
+						break;
+					case 'disconnected':
+					case 'closed':
+					case 'failed':
+						delete this.connectingPeers[peerName];
+						break;
+					default:
+						delete this.connectingPeers[peerName];
+						console.error(
+							`Unknown connection state: ${rtc.connectionState} from ${peerName}`
+						);
+						break;
+				}
+			};
+
+			this.connectingCallback(peerName);
+		}
+		return this.connectingPeers[peerName];
+	}
+
+	protected addIceCandidate(peerName: string, ice: RTCIceCandidate | null): void {
+		const peer = this.getConnectingPeer(peerName);
+		if (peer === null) {
+			return;
+		}
+		peer.rtc.addIceCandidate(ice ?? undefined);
+	}
+
+	protected addSdp(peerName: string, sdp: RTCSessionDescriptionInit): void {
+		const peer = this.getConnectingPeer(peerName);
+		if (peer === null) {
+			return;
+		}
+		peer.rtc.setRemoteDescription(sdp);
+		if (sdp.type === 'offer') {
+			peer.rtc.createAnswer().then((answer) => {
+				peer.rtc.setLocalDescription(answer);
+				this.onSdp(peerName, answer);
+			});
+		}
+	}
+
 	protected disconnectFrom(peerName: string): void {
 		const rtc = this.rtcConnections[peerName];
 		if (rtc === undefined) {
@@ -152,6 +202,17 @@ export abstract class NetworkPeer {
 		}
 		// Should trigger disconnection/close event
 		rtc.close();
+	}
+
+	protected createRtc(peerName: string): void {
+		const peer = this.getConnectingPeer(peerName);
+		if (peer === null) {
+			return;
+		}
+		peer.rtc.createOffer().then((offer) => {
+			peer.rtc.setLocalDescription(offer);
+			this.onSdp(peerName, offer);
+		});
 	}
 
 	protected addRtc(
@@ -184,29 +245,35 @@ export abstract class NetworkPeer {
 		};
 		for (const [channelName, channel] of Object.entries(dataChannels)) {
 			channel.onmessage = (msg) => {
-				const messageHandlers = this.getOnMessagesForPeer(peerName)[channelName];
+				const messageHandlers = this.onMessage[channelName];
 				if (messageHandlers !== undefined) {
-					messageHandlers.forEach((handler) => handler(msg));
+					messageHandlers.forEach((handler) => handler(peerName, msg));
 				}
 			};
 		}
 		this.dataChannels[peerName] = dataChannels;
 		this.rtcConnections[peerName] = rtc;
-		console.log(this.rtcConnections);
 		this.connectedCallback(peerName);
 	}
 
 	protected static createDataChannels(
 		rtc: RTCPeerConnection,
-		dataChannelInits: DataChannelInit[],
+		dataChannelInits: DataChannelInits,
 		hostConnection = false
 	): Record<string, RTCDataChannel> {
 		const dataChannels: Record<string, RTCDataChannel> = {};
-		for (const [id, dataChannelInit] of dataChannelInits.entries()) {
+		if (hostConnection) {
+			dataChannels["host-room"] = rtc.createDataChannel("host-room", {
+				negotiated: true,
+				id: 0,
+				ordered: true
+			});
+		}
+		for (const [id, [label, dataChannelInit]] of Object.entries(dataChannelInits).entries()) {
 			if (dataChannelInit.hostOnly && !hostConnection) {
 				continue;
 			}
-			dataChannels[dataChannelInit.label] = rtc.createDataChannel(dataChannelInit.label, {
+			dataChannels[label] = rtc.createDataChannel(label, {
 				negotiated: true,
 				id: id + 1,
 				...dataChannelInit
@@ -217,8 +284,6 @@ export abstract class NetworkPeer {
 
 	protected onPeerDisconnect(peerName: string): void {
 		// Retain onMessage handlers for reconnection
-		console.log(`RTC connection to ${peerName} disconnected from ${this.name}`);
-		console.log(this.rtcConnections);
 		delete this.dataChannels[peerName];
 		delete this.rtcConnections[peerName];
 		this.disconnectedCallback(peerName);
@@ -235,8 +300,13 @@ export interface SignalingGuestConnectionMessage {
 	// It is worthwhile to send `null` instead of omitting the field, because `null` represents ICE gathering completion
 	readonly ice?: RTCIceCandidate | null;
 	readonly offer?: RTCSessionDescriptionInit;
-	readonly name: string;
+	readonly from: string;
 }
+
+export type QueryResponse = {
+	query: "connectedPeers";
+	connectedPeers: string[];
+};
 
 export interface RtcHostConnectionMessage {
 	readonly connectedPeers?: string[];
@@ -244,19 +314,16 @@ export interface RtcHostConnectionMessage {
 		candidate: RTCIceCandidate | null;
 		from: string;
 	};
-	readonly offer?: {
+	readonly sdp?: {
 		sdp: RTCSessionDescriptionInit;
 		from: string;
 	};
-	readonly answer?: {
-		sdp: RTCSessionDescriptionInit;
-		from: string;
-	};
+	readonly query?: "connectedPeers";
+	readonly queryResponse?: QueryResponse;
 }
 
 export interface RtcGuestConnectionMessage {
 	readonly ice?: RTCIceCandidate | null;
-	readonly offer?: RTCSessionDescriptionInit;
-	readonly answer?: RTCSessionDescriptionInit;
+	readonly sdp?: RTCSessionDescriptionInit;
 	readonly recipient: string;
 }

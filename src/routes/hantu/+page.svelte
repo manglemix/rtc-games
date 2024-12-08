@@ -170,6 +170,7 @@
 						peerNames.delete(peerName);
 					};
 					netClient.addOnMessage('game-state', (_from, message) => {
+						console.log(message);
 						const obj: GameStateMessage = JSON.parse(message.data);
 						if (obj.startGame) {
 							onMainMenu = false;
