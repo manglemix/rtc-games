@@ -11,7 +11,6 @@
 	</p>
 
 	<nav class="mt-8 flex w-full flex-wrap justify-center gap-8 border-t-2 p-8">
-		<a href="/chat">Chat Demo</a>
 		<a href="/hantu">Hantu</a>
 	</nav>
 </header>
