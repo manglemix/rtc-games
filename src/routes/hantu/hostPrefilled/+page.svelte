@@ -3,47 +3,39 @@
 	import { DATA_CHANNELS, type GameStateMessage } from '$lib/hantu/logic/game-state.svelte';
 	import Game from '$lib/hantu/Game.svelte';
 	import { SvelteSet } from 'svelte/reactivity';
-	import { goto } from '$app/navigation';
 	import { onDestroy, onMount } from 'svelte';
+	import type { NetworkPeer } from '$lib/rtc';
+	import { createRoom, joinRoom } from '$lib/rtc-defaults';
 
-	const name = 'host';
-	let roomCode = $state('');
-	let botIndex = 0;
-	let bots: NetworkClient[] = $state([]);
-	let netClient: NetworkClient | null = $state(null);
-	let acceptInterval: number | null = null;
+	let closeRoom: (() => void) | null = null;
+	let netClient: NetworkPeer | null = $state(null);
 	let onMainMenu = $state(true);
+	let botIndex = 0;
+	let bots: NetworkPeer[] = $state([]);
+	const name = "host";
+	let roomCode = $state('');
 	let peerNames: SvelteSet<string> = $state(new SvelteSet());
 
-	onMount(() => {
+	onMount(async () => {
 		if (window.document.fullscreenElement) {
 			document.exitFullscreen();
 		}
-		roomCode = createRoomCode();
-		netClient = NetworkClient.createRoom(
-			name,
-			DATA_CHANNELS,
-			defaultUploadAnswer('hantu', roomCode)
-		);
-		const advertise = defaultAdvertise('hantu', roomCode);
-		advertise(netClient.advertiseAsHost());
-		netClient.onConnection = (newPeerName) => {
+		
+		const tmp = await createRoom('hantu', name, DATA_CHANNELS);
+		roomCode = tmp.roomCode;
+		netClient = tmp.peer;
+		closeRoom = tmp.closeRoom;
+		netClient.connectedCallback = (newPeerName) => {
 			peerNames.add(newPeerName);
-			advertise(netClient!.advertiseAsHost());
 		};
-		netClient.onGuestDisconnect = (peerName) => {
+		netClient.disconnectedCallback = (peerName) => {
 			peerNames.delete(peerName);
-			advertise(netClient!.advertiseAsHost());
 		};
-		acceptInterval = defaultAcceptOffers('hantu', roomCode, netClient);
 	});
 
 	onDestroy(() => {
 		if (netClient) {
 			netClient.close();
-		}
-		if (acceptInterval) {
-			clearInterval(acceptInterval);
 		}
 	});
 </script>
@@ -53,48 +45,43 @@
 	<h1>HANTU</h1>
 	<p>A social deduction game inspired by MindNight, Among Us, and Werewolf</p>
 	<section id="main-menu" class="flex flex-col items-center">
-		<h1>Room Code: {roomCode}</h1>
-		{#each peerNames as peer}
-			<p>{peer}</p>
-		{/each}
-		<button
-			onclick={() => {
-				defaultClearAdvertise('hantu', roomCode);
-				clearInterval(acceptInterval!);
-				acceptInterval = null;
-				onMainMenu = false;
-				netClient!.onConnection = (newPeerName) => {
-					console.error('Unexpected connection from', newPeerName);
-				};
-				netClient!.onGuestDisconnect = (peerName) => {
-					peerNames.delete(peerName);
-				};
-			}}>Start Game</button
-		>
-		<button
-			onclick={() => {
-				netClient!.onGuestDisconnect = () => {};
-				netClient!.close();
-				clearInterval(acceptInterval!);
-				acceptInterval = null;
-				goto('/hantu');
-			}}>Close Room</button
-		>
-		<button
-			onclick={async () => {
-				const newNetClient = await defaultConnectToRoom(
-					'hantu',
-					roomCode,
-					`bot${botIndex++}`,
-					DATA_CHANNELS
-				);
-				if (newNetClient === null) {
-					console.error('Failed to connect to room as bot');
-					return;
-				}
-				bots.push(newNetClient);
-			}}>Add Bot</button
-		>
+		{#if netClient}
+			<h1>Room Code: {roomCode}</h1>
+			{#each peerNames as peer}
+				<p>{peer}</p>
+			{/each}
+			<button
+				onclick={() => {
+					closeRoom!();
+					onMainMenu = false;
+					netClient!.connectedCallback = (newPeerName) => {
+						console.error('Unexpected connection from', newPeerName);
+					};
+					netClient!.disconnectedCallback = (peerName) => {
+						peerNames.delete(peerName);
+					};
+				}}>Start Game</button
+			>
+			<button
+				onclick={() => {
+					closeRoom!();
+					roomCode = '';
+					netClient!.disconnectedCallback = () => {};
+					netClient!.close();
+					netClient = null;
+				}}>Close Room</button
+			>
+			<button
+				onclick={async () => {
+					const tmp = await joinRoom('hantu', `bot${botIndex++}`, roomCode, DATA_CHANNELS);
+					if (tmp === null) {
+						console.error('Failed to connect to room as bot');
+						return;
+					}
+					bots.push(tmp.peer);
+				}}>Add Bot</button
+			>
+		{/if}
 	</section>
 {:else}
 	<Game netClient={netClient!} {roomCode} {bots} />
@@ -103,7 +90,8 @@
 <style>
 	h1,
 	p,
-	button {
+	button
+	{
 		color: white;
 	}
 </style>
