@@ -48,6 +48,7 @@ type KinematicsMessage = {
 };
 type PlayerStateMessage = {
 	died?: true;
+	stunned?: boolean;
 };
 type CryptStateMessage = {
 	addProgress?: number;
@@ -220,8 +221,11 @@ export abstract class GameState {
 				if (obj.died) {
 					player.alive = false;
 				}
+				if (obj.stunned !== undefined) {
+					player._stunned = obj.stunned;
+				}
 			} else {
-				console.error('Received player kinematics from unknown player: ' + from);
+				console.error('Received player state from unknown player: ' + from);
 			}
 		});
 		netClient.addOnMessage('crypt-state', (_from, msg) => {
@@ -255,6 +259,7 @@ export abstract class GameState {
 			}
 		}, 16);
 
+		// Send peers our proposal if we are the proposer
 		$effect(() => {
 			if (this.state === State.KeyProposition) {
 				if (this.getVoteOrderedPlayers()[this.proposerIndex]!.name === this.thisPlayer.name) {
@@ -262,12 +267,17 @@ export abstract class GameState {
 				}
 			}
 		});
+		// Send peers our vote if we have voted
 		$effect(() => {
 			if (this.state === State.KeyVote) {
 				if (this.thisPlayer.currentVote !== undefined) {
 					this.sendKeyAction({ vote: { value: this.thisPlayer.currentVote } });
 				}
 			}
+		});
+		// Send peers our stunned state if it changes
+		$effect(() => {
+			this.sendPlayerState({ stunned: this.thisPlayer.stunned });
 		});
 	}
 

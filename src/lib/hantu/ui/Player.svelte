@@ -30,12 +30,15 @@
 	}
 
 	const delta = $derived(playerObj.origin.sub(cameraOrigin));
+	const width = $derived(PLAYER_HALF_WIDTH * 2 * bgScale);
+	const left = $derived(windowWidth / 2 - bgScale * (PLAYER_HALF_WIDTH - delta.x));
+	const top = $derived(windowHeight / 2 - bgScale * (PLAYER_HALF_HEIGHT - delta.y));
 	const style = $derived.by(() => {
 		return (
-			`--width: ${PLAYER_HALF_WIDTH * 2 * bgScale}px;` +
+			`--width: ${width}px;` +
 			`--height: ${PLAYER_HALF_HEIGHT * 2 * bgScale}px;` +
-			`--left: ${windowWidth / 2 - bgScale * (PLAYER_HALF_WIDTH - delta.x)}px;` +
-			`--top: ${windowHeight / 2 - bgScale * (PLAYER_HALF_HEIGHT - delta.y)}px;` +
+			`--left: ${left}px;` +
+			`--top: ${top}px;` +
 			(gameState.proposals.has(playerObj.name) &&
 			(gameState.state === State.KeyProposition ||
 				gameState.state === State.KeyVote ||
@@ -47,6 +50,9 @@
 	});
 </script>
 
+<h3 class="fixed font-bold text-center" style:top={`calc(${top}px - 2rem)`} style:left={`${left}px`} style:width={`${width}px`}>
+	{playerObj.name}
+</h3>
 {#if gameState.state === State.KeyProposition && gameState.proposer.name === gameState.thisPlayer.name}
 	<button class="player hoverable" onclick={onPropose} type="button" {style}>
 		<img src={playerObj.spriteUrl} alt="Player" />

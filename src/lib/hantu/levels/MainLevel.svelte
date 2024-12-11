@@ -150,19 +150,27 @@
 	{/if}
 {/each}
 
-{#if gameState.state === State.KeyProposition && gameState.proposals.size === gameState.requiredProposals && gameState.proposer.name === gameState.thisPlayer.name}
-	<div class="fixed bottom-4 flex w-screen flex-row justify-center">
-		<button
-			onclick={() => {
-				gameState.finalizeProposals();
-			}}
-		>
-			Finish Proposal
-		</button>
-	</div>
+{#if gameState.state === State.KeyProposition && gameState.proposer.name === gameState.thisPlayer.name}
+	<h2 class="fixed top-4 flex w-screen flex-row justify-center">
+		Pick {gameState.requiredProposals} people to be the key holders
+	</h2>
+	{#if gameState.proposals.size === gameState.requiredProposals}
+		<div class="fixed bottom-4 flex w-screen flex-row justify-center">
+			<button
+				onclick={() => {
+					gameState.finalizeProposals();
+				}}
+			>
+				Finish Proposal
+			</button>
+		</div>
+	{/if}
 {/if}
 
 {#if gameState.state === State.KeyVote && gameState.thisPlayer.currentVote === undefined}
+	<h2 class="fixed bottom-12 flex w-screen flex-row justify-center">
+		Do you agree with {gameState.proposer.name}'s proposition
+	</h2>
 	<div class="fixed bottom-4 flex w-screen flex-row justify-center gap-4">
 		<button
 			onclick={() => {
@@ -206,5 +214,15 @@
 		-moz-user-select: none;
 		-webkit-user-select: none;
 		-ms-user-select: none;
+	}
+
+	button {
+		font-size: 3rem;
+		font-weight: bold;
+	}
+
+	h2 {
+		font-size: 5rem;
+		font-weight: bold;
 	}
 </style>

@@ -4,13 +4,17 @@ import { AreaType } from '../levels/level.svelte';
 import { browser } from '$app/environment';
 
 export class Player {
+	public readonly STUN_DURATION_SECS = 5;
+	public readonly STUN_ENERGY_RESET = 0.4;
+	public alive = $state(true);
+
 	protected _velocity: Vector2 = $state(new Vector2(0, 0));
 	protected _origin: Vector2 = $state(new Vector2(200, 260));
-	public alive = $state(true);
 
 	_currentVote?: boolean = $state(undefined);
 	_possessed = false;
-	_isKeyHolder: boolean = false;
+	_isKeyHolder = false;
+	_stunned = $state(false);
 
 	public get currentVote() {
 		return this._currentVote;
@@ -40,6 +44,10 @@ export class Player {
 		this._velocity = newVelocity;
 	}
 
+	public get stunned() {
+		return this._stunned;
+	}
+
 	constructor(
 		public readonly name: string,
 		public readonly spriteUrl: string,
@@ -54,11 +62,14 @@ export class Player {
 export class ThisPlayer extends Player {
 	public onEnterArea: (areaType: AreaType, areaId: number) => void = () => {};
 	public onExitArea: (areaType: AreaType, areaId: number) => void = () => {};
+	public energy = $state(1);
+	public energyDrain = $state(0.022);
 
 	private collisionMask?: ImageObj;
 	// 0 means no collision layer
 	private currentCollisionLayer = $state(0);
 	private _currentAreaType = $state(AreaType.DiningArea);
+
 	public readonly currentAreaType = $derived.by(() => {
 		if (this.currentCollisionLayer === 0) {
 			return null;
@@ -89,6 +100,20 @@ export class ThisPlayer extends Player {
 	}
 
 	process(delta: number) {
+		if (this.stunned) {
+			this.energy += (this.STUN_ENERGY_RESET / this.STUN_DURATION_SECS) * delta;
+			if (this.energy >= this.STUN_ENERGY_RESET) {
+				this.energy = this.STUN_ENERGY_RESET;
+				this._stunned = false;
+			}
+			return;
+		} else {
+			this.energy -= this.energyDrain * delta;
+			if (this.energy <= 0) {
+				this.energy = 0;
+				this._stunned = true;
+			}
+		}
 		const step = this.velocity.mul(delta);
 		if (this.collisionMask) {
 			let stepAbs = step.abs();
