@@ -153,6 +153,7 @@ export abstract class GameState {
 				level.playerSprites[0]!,
 				level.playerHalfDimensions[0]!
 			);
+			this.initialPossessedCount = 1;
 			return;
 		}
 
