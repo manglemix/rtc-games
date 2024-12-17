@@ -11,8 +11,9 @@ export class Player {
 	public readonly STUN_DURATION_SECS = 5;
 	public readonly STUN_ENERGY_RESET = 0.4;
 	public alive = $state(true);
+	public haunted = $state(false);
 
-	protected _hauntInitializing = false;
+	protected _hauntInitializing = $state(false);
 	protected _velocity: Vector2 = $state(new Vector2(0, 0));
 	protected _origin: Vector2 = $state(new Vector2(200, 260));
 
@@ -65,6 +66,7 @@ export class Player {
 		}
 		this._haunting = value;
 		if (this.haunting) {
+			this.haunted = true;
 			this._hauntInitializing = true;
 			setTimeout(() => {
 				this._hauntInitializing = false;
@@ -99,7 +101,6 @@ export class ThisPlayer extends Player {
 	// public onExitArea: (areaType: AreaType, areaId: number) => void = () => {};
 	public energy = $state(1);
 	public energyDrain = $state(0.022);
-	public haunted = $state(false);
 
 	private collisionMask?: ImageObj;
 	// 0 means no collision layer
@@ -128,13 +129,6 @@ export class ThisPlayer extends Player {
 		if (browser) {
 			ImageObj.load(collisionMaskUrl).then((img) => {
 				this.collisionMask = img;
-			});
-			$effect(() => {
-				console.log("Running");
-				if (this.hauntInitializing) {
-					this.haunted = true;
-					this.forceExitLayer();
-				}
 			});
 		}
 	}
