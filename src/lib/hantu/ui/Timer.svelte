@@ -3,7 +3,7 @@
 
 	let { endTimeMsecs }: { endTimeMsecs: number } = $props();
 
-	let timerInterval: number = 0;
+	let timerInterval: NodeJS.Timeout | number = 0;
 	let percentage = $state(100);
 
 	onMount(() => {

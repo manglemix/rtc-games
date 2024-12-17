@@ -3,6 +3,8 @@ import ImageObj from 'image-js';
 import { AreaType } from '../levels/level.svelte';
 import { browser } from '$app/environment';
 
+const MAX_STUNNED_COUNT = 3;
+
 export class Player {
 	public readonly STUN_DURATION_SECS = 5;
 	public readonly STUN_ENERGY_RESET = 0.4;
@@ -69,6 +71,11 @@ export class ThisPlayer extends Player {
 	// 0 means no collision layer
 	private currentCollisionLayer = $state(0);
 	private _currentAreaType = $state(AreaType.DiningArea);
+	private _stunnedCount = $state(0);
+
+	public get stunnedCount() {
+		return this._stunnedCount;
+	}
 
 	public readonly currentAreaType = $derived.by(() => {
 		if (this.currentCollisionLayer === 0) {
@@ -101,17 +108,32 @@ export class ThisPlayer extends Player {
 
 	process(delta: number) {
 		if (this.stunned) {
-			this.energy += (this.STUN_ENERGY_RESET / this.STUN_DURATION_SECS) * delta;
-			if (this.energy >= this.STUN_ENERGY_RESET) {
-				this.energy = this.STUN_ENERGY_RESET;
-				this._stunned = false;
+			if (this.possessed) {
+				this.energy += (1 / this.STUN_DURATION_SECS) * delta;
+				if (this.energy >= 1) {
+					this.energy = 1;
+					this._stunned = false;
+				}
+				
+			} else {
+				this.energy += (this.STUN_ENERGY_RESET / this.STUN_DURATION_SECS) * delta;
+				if (this.energy >= this.STUN_ENERGY_RESET) {
+					this.energy = this.STUN_ENERGY_RESET;
+					this._stunned = false;
+				}
 			}
 			return;
 		} else {
-			this.energy -= this.energyDrain * delta;
+			if (!this.possessed) {
+				this.energy -= this.energyDrain * delta;
+			}
 			if (this.energy <= 0) {
 				this.energy = 0;
 				this._stunned = true;
+				this._stunnedCount++;
+				if (!this.possessed && this._stunnedCount >= MAX_STUNNED_COUNT) {
+					this.alive = false;
+				}
 			}
 		}
 		const step = this.velocity.mul(delta);

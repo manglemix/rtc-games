@@ -46,10 +46,16 @@ The current player you are helping is named "${this.gameState.thisPlayer.name}",
             msg += "The other players are: " + otherPlayers.map((player) => player.name).join(', ') + ".\n";
         }
 
-        const proposals = Array.from(this.gameState.proposals).join(', ');
+        const proposals = Array.from(this.gameState.proposals).map((name) => {
+            if (name === this.gameState.thisPlayer.name) {
+                return 'the player';
+            } else {
+                return name;
+            }
+        }).join(', ');
         switch (this.gameState.state) {
             case State.KeyProposition:
-                msg += `It is currently the key proposition phase. ${this.gameState.proposer.name} is the proposer. ${this.gameState.proposals.size > 0 ? `The current proposed key holders are: ${proposals}` : 'They have not proposed anyone yet.'}.\n`;
+                msg += `It is currently the key proposition phase. ${this.gameState.proposer.name} is the proposer. ${this.gameState.proposals.size > 0 ? `The current proposed key holders are: ${proposals}` : 'They have not proposed anyone yet'}.\n`;
                 break;
             case State.KeyVote:
                 msg += `It is currently the key vote phase. The key holders are: ${proposals}.\n`;

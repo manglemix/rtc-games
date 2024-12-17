@@ -8,6 +8,7 @@
 	import CryptFixes from '../ui/crypt/CryptFixes.svelte';
 	import Vignette from '$lib/vignette/Vignette.svelte';
 	import Pause from '../ui/Pause.svelte';
+	import Energy from '../ui/Energy.svelte';
 
 	const gameState: GameState = getContext('gameState');
 	let windowWidth = $state(0);
@@ -203,6 +204,7 @@
 {/if}
 <Vignette />
 <Pause bind:visible={paused} />
+<Energy />
 <Timer endTimeMsecs={gameState.stateEndTimeMsecs} />
 {#if gameState.thisPlayer.currentAreaType === AreaType.Crypt}
 	<CryptFixes />

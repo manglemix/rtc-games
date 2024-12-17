@@ -101,6 +101,10 @@ export abstract class GameState {
 		return this._ending;
 	}
 
+	public get canHaunt(): boolean {
+		return this.state === State.Night && this.day > 1;
+	}
+
 	public goto = goto;
 	public proposals: SvelteSet<string> = $state(new SvelteSet());
 	public readonly thisPlayer: ThisPlayer;
