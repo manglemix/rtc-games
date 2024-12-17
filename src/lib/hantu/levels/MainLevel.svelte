@@ -7,11 +7,13 @@
 	import { AreaType } from './level.svelte';
 	import CryptFixes from '../ui/crypt/CryptFixes.svelte';
 	import Vignette from '$lib/vignette/Vignette.svelte';
+	import Pause from '../ui/Pause.svelte';
 
 	const gameState: GameState = getContext('gameState');
 	let windowWidth = $state(0);
 	let windowHeight = $state(0);
 	let processInterval = 0;
+	let paused = $state(false);
 	// voteCameraRadius
 	const bgScale = $derived.by(() => {
 		const maxDimension = Math.max(windowWidth, windowHeight);
@@ -32,6 +34,9 @@
 	let cameraOrigin = $state(gameState.thisPlayer.origin);
 
 	function keyDown(event: KeyboardEvent) {
+		if (paused) {
+			return;
+		}
 		if (gameState.state !== State.Day && gameState.state !== State.Night) {
 			return;
 		}
@@ -69,6 +74,9 @@
 	}
 
 	function keyUp(event: KeyboardEvent) {
+		if (paused) {
+			return;
+		}
 		switch (event.code) {
 			case 'KeyS':
 			case 'ArrowDown':
@@ -132,6 +140,11 @@
 			cameraOrigin = gameState.thisPlayer.origin;
 		}
 	});
+	$effect(() => {
+		console.log("Paused:", paused);
+		movementVector = new Vector2(0, 0);
+		gameState.thisPlayer.velocity = movementVector;
+	})
 </script>
 
 <img
@@ -189,6 +202,7 @@
 	</div>
 {/if}
 <Vignette />
+<Pause bind:visible={paused} />
 <Timer endTimeMsecs={gameState.stateEndTimeMsecs} />
 {#if gameState.thisPlayer.currentAreaType === AreaType.Crypt}
 	<CryptFixes />

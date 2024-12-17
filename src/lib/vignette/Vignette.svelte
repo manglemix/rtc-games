@@ -4,7 +4,7 @@
 
 	const gameState: GameState = getContext('gameState');
 	let opacity = $state(0);
-	let interval = 0;
+	let interval: NodeJS.Timeout | number = 0;
 
 	onMount(() => {
 		interval = setInterval(() => {
