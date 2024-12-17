@@ -4,7 +4,7 @@
 	import { HostPeer } from '$lib/rtc-host';
 
 	let netClient: HostPeer = new HostPeer('host', () => {}, DATA_CHANNELS);
-	let roomCode = "000000";
+	let roomCode = '000000';
 </script>
 
 <Game {netClient} {roomCode} />

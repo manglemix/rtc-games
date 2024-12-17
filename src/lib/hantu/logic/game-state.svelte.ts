@@ -5,21 +5,22 @@ import { Player, ThisPlayer } from './player.svelte';
 import { goto } from '$app/navigation';
 import { browser } from '$app/environment';
 import type { DataChannelInits, NetworkPeer } from '$lib/rtc';
+import { untrack } from 'svelte';
 
 export const DATA_CHANNELS: DataChannelInits = {
-	"game-state": {
+	'game-state': {
 		hostOnly: true
 	},
-	"key-action": {},
-	"player-kinematics": {
+	'key-action': {},
+	'player-kinematics': {
 		ordered: false,
 		maxRetransmits: 0
 	},
-	"player-state": {},
-	"crypt-state": {},
-	"ollama": {
+	'player-state': {},
+	'crypt-state': {},
+	ollama: {
 		hostOnly: true
-	},
+	}
 };
 
 export enum Ending {
@@ -46,12 +47,15 @@ type KeyActionMessage = {
 	vote?: { value: boolean };
 };
 type KinematicsMessage = {
+	name?: string;
 	origin?: { x: number; y: number };
 	velocity?: { x: number; y: number };
 };
 type PlayerStateMessage = {
+	name?: string;
 	died?: true;
 	stunned?: boolean;
+	haunting?: boolean;
 };
 type CryptStateMessage = {
 	addProgress?: number;
@@ -102,7 +106,7 @@ export abstract class GameState {
 	}
 
 	public get canHaunt(): boolean {
-		return this.state === State.Night && this.day > 1;
+		return this.state === State.Night && this.day > 2;
 	}
 
 	public goto = goto;
@@ -175,11 +179,6 @@ export abstract class GameState {
 				level.playerHalfDimensions[i]!
 			);
 			this.players.set(netClient.name, this.thisPlayer);
-			$effect(() => {
-				if (!this.thisPlayer.alive) {
-					this.sendPlayerState({ died: true });
-				}
-			});
 		}
 
 		{
@@ -194,23 +193,12 @@ export abstract class GameState {
 			}
 		}
 
-		// Propagate player kinematics at 20fps
-		this.propagatePlayerKinematicsInterval = setInterval(() => {
-			if (this.state === State.Day || this.state === State.Night) {
-				this.netClient.broadcast(
-					'player-kinematics',
-					JSON.stringify({
-						origin: this.thisPlayer.origin.toJSON(),
-						velocity: this.thisPlayer.velocity.toJSON()
-					})
-				);
-			}
-		}, 50);
 		netClient.addOnMessage('player-kinematics', (from, msg) => {
 			if (this.state !== State.Day && this.state !== State.Night) {
 				return;
 			}
 			const obj: KinematicsMessage = JSON.parse(msg.data);
+			from = obj.name ?? from;
 			const player = this.players.get(from);
 			if (player) {
 				if (obj.origin) {
@@ -225,6 +213,7 @@ export abstract class GameState {
 		});
 		netClient.addOnMessage('player-state', (from, msg) => {
 			const obj: PlayerStateMessage = JSON.parse(msg.data);
+			from = obj.name ?? from;
 			const player = this.players.get(from);
 			if (player) {
 				if (obj.died) {
@@ -232,6 +221,9 @@ export abstract class GameState {
 				}
 				if (obj.stunned !== undefined) {
 					player._stunned = obj.stunned;
+				}
+				if (obj.haunting !== undefined) {
+					player.haunting = obj.haunting;
 				}
 			} else {
 				console.error('Received player state from unknown player: ' + from);
@@ -267,6 +259,56 @@ export abstract class GameState {
 				}
 			}
 		}, 16);
+
+		$effect(() => {
+			if (!this.thisPlayer.alive) {
+				this.sendPlayerState({ died: true });
+			}
+		});
+		if (this.thisPlayer.possessed) {
+			let originalPosition = this.thisPlayer.origin;
+			let lastHaunting = false;
+
+			$effect(() => {
+				if (this.thisPlayer.haunting === lastHaunting) {
+					return;
+				}
+				lastHaunting = this.thisPlayer.haunting;
+				this.sendPlayerState({ haunting: this.thisPlayer.haunting });
+				this.thisPlayer.velocity = new Vector2(0, 0);
+
+				if (this.thisPlayer.haunting) {
+					untrack(() => {
+						originalPosition = this.thisPlayer.origin;
+					});
+					this.thisPlayer.origin = this.level.cryptOrigin;
+				} else {
+					this.thisPlayer.origin = originalPosition;
+				}
+				untrack(() => {
+					this.netClient.broadcast(
+						'player-kinematics',
+						JSON.stringify({
+							origin: this.thisPlayer.origin.toJSON(),
+							velocity: new Vector2(0, 0)
+						})
+					);
+				});
+			});
+		}
+
+		// Propagate player kinematics at 20fps
+		this.propagatePlayerKinematicsInterval = setInterval(() => {
+			if (this.state === State.Day || this.state === State.Night) {
+				this.netClient.broadcast(
+					'player-kinematics',
+					JSON.stringify({
+						origin: this.thisPlayer.origin.toJSON(),
+						velocity: this.thisPlayer.velocity.toJSON()
+					})
+				);
+			}
+		}, 50);
 
 		// Send peers our proposal if we are the proposer
 		$effect(() => {
@@ -335,6 +377,18 @@ export abstract class GameState {
 		this.sendCryptState({ addProgress: progress });
 	}
 
+	public killWithinRadius(origin: Vector2, radius: number): string[] {
+		let killed: string[] = [];
+		for (const player of this.players.values()) {
+			if (player.alive && !player.possessed && player.origin.sub(origin).length() < radius) {
+				player.alive = false;
+				killed.push(player.name);
+				this.sendPlayerState({ name: player.name, died: true });
+			}
+		}
+		return killed;
+	}
+
 	public close() {
 		clearInterval(this.propagatePlayerKinematicsInterval);
 		clearInterval(this.processPlayerKinematicsInterval);
@@ -347,6 +401,7 @@ export abstract class GameState {
 		}
 		switch (newState) {
 			case State.KeyProposition:
+				this.thisPlayer.haunted = false;
 				this.thisPlayer.forceExitLayer();
 				if (this._state === State.KeyVoteResults) {
 					this._proposerIndex = (this._proposerIndex + 1) % this.players.size;

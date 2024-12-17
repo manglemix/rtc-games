@@ -12,7 +12,7 @@
 	let onMainMenu = $state(true);
 	let botIndex = 0;
 	let bots: NetworkPeer[] = $state([]);
-	const name = "host";
+	const name = 'host';
 	let roomCode = $state('');
 	let peerNames: SvelteSet<string> = $state(new SvelteSet());
 
@@ -20,7 +20,7 @@
 		if (window.document.fullscreenElement) {
 			document.exitFullscreen();
 		}
-		
+
 		const tmp = await createRoom('hantu', name, DATA_CHANNELS);
 		roomCode = tmp.roomCode;
 		netClient = tmp.peer;
@@ -90,8 +90,7 @@
 <style>
 	h1,
 	p,
-	button
-	{
+	button {
 		color: white;
 	}
 </style>

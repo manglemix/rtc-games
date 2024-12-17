@@ -87,12 +87,16 @@ export class GuestPeer extends NetworkPeer {
 
 		return output;
 	}
-	protected addRtc(peerName: string, rtc: RTCPeerConnection, dataChannels: Record<string, RTCDataChannel>): void {
+	protected addRtc(
+		peerName: string,
+		rtc: RTCPeerConnection,
+		dataChannels: Record<string, RTCDataChannel>
+	): void {
 		super.addRtc(peerName, rtc, dataChannels);
 		if (peerName !== this.hostName) {
 			return;
 		}
-		const hostRoomChannel = dataChannels["host-room"]!;
+		const hostRoomChannel = dataChannels['host-room']!;
 		this.onIceCandidate = (recipient, ice) => {
 			const toHost: RtcGuestConnectionMessage = { ice, recipient };
 			hostRoomChannel.send(JSON.stringify(toHost));

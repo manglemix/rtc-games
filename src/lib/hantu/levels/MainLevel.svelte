@@ -9,6 +9,7 @@
 	import Vignette from '$lib/vignette/Vignette.svelte';
 	import Pause from '../ui/Pause.svelte';
 	import Energy from '../ui/Energy.svelte';
+	import Possessed from '../ui/Possessed.svelte';
 
 	const gameState: GameState = getContext('gameState');
 	let windowWidth = $state(0);
@@ -111,12 +112,12 @@
 		};
 		window.onresize = onResize;
 		onResize();
-		gameState.thisPlayer.onEnterArea = (areaType) => {
-			console.log('Entered area:', areaType);
-		};
-		gameState.thisPlayer.onExitArea = (areaType) => {
-			console.log('Exited area:', areaType);
-		};
+		// gameState.thisPlayer.onEnterArea = (areaType) => {
+		// 	console.log('Entered area:', areaType);
+		// };
+		// gameState.thisPlayer.onExitArea = (areaType) => {
+		// 	console.log('Exited area:', areaType);
+		// };
 
 		window.addEventListener('keydown', keyDown, true);
 		window.addEventListener('keyup', keyUp, true);
@@ -142,10 +143,10 @@
 		}
 	});
 	$effect(() => {
-		console.log("Paused:", paused);
+		console.log('Paused:', paused);
 		movementVector = new Vector2(0, 0);
 		gameState.thisPlayer.velocity = movementVector;
-	})
+	});
 </script>
 
 <img
@@ -160,7 +161,15 @@
 
 {#each gameState.players as [_name, player]}
 	{#if player.alive}
-		<Player {bgScale} {windowWidth} {windowHeight} playerObj={player} {gameState} {cameraOrigin} />
+		<Player
+			{bgScale}
+			{windowWidth}
+			{windowHeight}
+			playerObj={player}
+			{gameState}
+			{cameraOrigin}
+			hideName={player.name === gameState.thisPlayer.name}
+		/>
 	{/if}
 {/each}
 
@@ -205,10 +214,11 @@
 <Vignette />
 <Pause bind:visible={paused} />
 <Energy />
-<Timer endTimeMsecs={gameState.stateEndTimeMsecs} />
+<Possessed />
 {#if gameState.thisPlayer.currentAreaType === AreaType.Crypt}
 	<CryptFixes />
 {/if}
+<Timer endTimeMsecs={gameState.stateEndTimeMsecs} />
 
 <style>
 	#background {

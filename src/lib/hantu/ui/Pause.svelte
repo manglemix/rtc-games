@@ -1,21 +1,21 @@
-<script lang=ts>
-	import { getContext, onDestroy, onMount } from "svelte";
-	import type { AiAssistant } from "../logic/ai-assistant";
+<script lang="ts">
+	import { getContext, onDestroy, onMount } from 'svelte';
+	import type { AiAssistant } from '../logic/ai-assistant';
 
-    let prompt = $state("");
-    let response = $state("");
-    let { visible = $bindable(false) }: { visible?: boolean } = $props();
+	let prompt = $state('');
+	let response = $state('');
+	let { visible = $bindable(false) }: { visible?: boolean } = $props();
 
 	const aiAssistant: AiAssistant = getContext('aiAssistant');
-    aiAssistant.onAIResponsePart = (part) => {
-        response += part ?? "";
-    };
+	aiAssistant.onAIResponsePart = (part) => {
+		response += part ?? '';
+	};
 
 	function keyDown(event: KeyboardEvent) {
 		switch (event.code) {
 			case 'Escape':
-                visible = !visible;
-                break;
+				visible = !visible;
+				break;
 			default:
 				return; // Allow other keys to be handled
 		}
@@ -33,21 +33,25 @@
 </script>
 
 {#if visible}
-<section>
-    <form onsubmit={(e) => {
-        e.preventDefault();
-        aiAssistant.askAI(prompt);
-    }}>
-        <label for="prompt">Prompt</label>
-        <input name="prompt" bind:value={prompt} />
-        <button onclick={() => {
-            response = "";
-        }}>Ask</button>
-        <p>{response}</p>
-    </form>
-</section>
+	<section>
+		<form
+			onsubmit={(e) => {
+				e.preventDefault();
+				aiAssistant.askAI(prompt);
+			}}
+		>
+			<label for="prompt">Prompt</label>
+			<input name="prompt" bind:value={prompt} />
+			<button
+				onclick={() => {
+					response = '';
+				}}>Ask</button
+			>
+			<p>{response}</p>
+		</form>
+	</section>
 {/if}
-    
+
 <style>
 	section {
 		position: fixed;

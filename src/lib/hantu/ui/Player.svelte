@@ -9,7 +9,8 @@
 		windowHeight,
 		playerObj,
 		gameState,
-		cameraOrigin
+		cameraOrigin,
+		hideName
 	}: {
 		bgScale: number;
 		windowWidth: number;
@@ -17,6 +18,7 @@
 		playerObj: Player;
 		gameState: GameState;
 		cameraOrigin: Vector2;
+		hideName?: boolean;
 	} = $props();
 	const PLAYER_HALF_WIDTH = playerObj.spriteHalfDimensions.x;
 	const PLAYER_HALF_HEIGHT = playerObj.spriteHalfDimensions.y;
@@ -50,9 +52,16 @@
 	});
 </script>
 
-<h3 class="fixed font-bold text-center" style:top={`calc(${top}px - 2rem)`} style:left={`${left}px`} style:width={`${width}px`}>
-	{playerObj.name}
-</h3>
+{#if hideName !== true}
+	<h3
+		class="fixed text-center font-bold"
+		style:top={`calc(${top}px - 2rem)`}
+		style:left={`${left}px`}
+		style:width={`${width}px`}
+	>
+		{playerObj.name}
+	</h3>
+{/if}
 {#if gameState.state === State.KeyProposition && gameState.proposer.name === gameState.thisPlayer.name}
 	<button class="player hoverable" onclick={onPropose} type="button" {style}>
 		<img src={playerObj.spriteUrl} alt="Player" />

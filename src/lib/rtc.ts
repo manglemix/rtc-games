@@ -86,7 +86,6 @@ export abstract class NetworkPeer {
 		delete this.onMessage[channelName];
 	}
 
-
 	public broadcast(channelName: string, msg: string): void {
 		for (const peerName in this.dataChannels) {
 			this.sendTo(peerName, msg, channelName);
@@ -135,7 +134,11 @@ export abstract class NetworkPeer {
 				return null;
 			}
 			const rtc = new RTCPeerConnection(rtcConfig);
-			const dataChannels = NetworkPeer.createDataChannels(rtc, this.dataChannelInits, this.isHost || peerName === this.hostName);
+			const dataChannels = NetworkPeer.createDataChannels(
+				rtc,
+				this.dataChannelInits,
+				this.isHost || peerName === this.hostName
+			);
 			this.connectingPeers[peerName] = {
 				rtc,
 				dataChannels
@@ -161,9 +164,7 @@ export abstract class NetworkPeer {
 						break;
 					default:
 						delete this.connectingPeers[peerName];
-						console.error(
-							`Unknown connection state: ${rtc.connectionState} from ${peerName}`
-						);
+						console.error(`Unknown connection state: ${rtc.connectionState} from ${peerName}`);
 						break;
 				}
 			};
@@ -263,7 +264,7 @@ export abstract class NetworkPeer {
 	): Record<string, RTCDataChannel> {
 		const dataChannels: Record<string, RTCDataChannel> = {};
 		if (hostConnection) {
-			dataChannels["host-room"] = rtc.createDataChannel("host-room", {
+			dataChannels['host-room'] = rtc.createDataChannel('host-room', {
 				negotiated: true,
 				id: 0,
 				ordered: true
@@ -304,7 +305,7 @@ export interface SignalingGuestConnectionMessage {
 }
 
 export type QueryResponse = {
-	query: "connectedPeers";
+	query: 'connectedPeers';
 	connectedPeers: string[];
 };
 
@@ -318,7 +319,7 @@ export interface RtcHostConnectionMessage {
 		sdp: RTCSessionDescriptionInit;
 		from: string;
 	};
-	readonly query?: "connectedPeers";
+	readonly query?: 'connectedPeers';
 	readonly queryResponse?: QueryResponse;
 }
 

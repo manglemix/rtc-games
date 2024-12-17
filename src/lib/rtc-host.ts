@@ -9,7 +9,6 @@ import {
 	type SignalingHostConnectionMessage
 } from './rtc';
 
-
 export class HostPeer extends NetworkPeer {
 	private hostRoomDataChannels: Record<string, RTCDataChannel> = {};
 	private onQuery?: (peerName: string, response: QueryResponse) => void;
@@ -22,19 +21,17 @@ export class HostPeer extends NetworkPeer {
 		super(name, name, true, dataChannelInits);
 		this.onIceCandidate = (peerName, ice) => {
 			this.sendToConnectingGuests({ [peerName]: { ice } });
-		}
+		};
 		this.onSdp = (peerName, answer) => {
 			if (answer.type !== 'answer') {
 				console.error(`Expected answer, got ${answer.type}`);
 				return;
 			}
 			this.sendToConnectingGuests({ [peerName]: { answer } });
-		}
+		};
 	}
 
-	public acceptGuestConnectionMessages(
-		msgs: SignalingGuestConnectionMessage[]
-	): void {
+	public acceptGuestConnectionMessages(msgs: SignalingGuestConnectionMessage[]): void {
 		for (const msg of msgs) {
 			if (msg.ice) {
 				this.addIceCandidate(msg.from, msg.ice);
@@ -48,11 +45,11 @@ export class HostPeer extends NetworkPeer {
 			console.error('Query already in progress');
 			return false;
 		}
-		
+
 		return await new Promise((resolve) => {
 			const handled = Object.fromEntries(this.getPeerNames().map((name) => [name, false]));
 			this.onQuery = (peerName, response) => {
-				if (response.query === "connectedPeers") {
+				if (response.query === 'connectedPeers') {
 					const expectedConnected = new Set(this.getPeerNames());
 					const actualConnected = new Set(response.connectedPeers);
 
@@ -78,13 +75,16 @@ export class HostPeer extends NetworkPeer {
 					}
 				}
 			};
-			
 		});
 	}
 
-	protected async addRtc(peerName: string, rtc: RTCPeerConnection, dataChannels: Record<string, RTCDataChannel>): Promise<void> {
+	protected async addRtc(
+		peerName: string,
+		rtc: RTCPeerConnection,
+		dataChannels: Record<string, RTCDataChannel>
+	): Promise<void> {
 		super.addRtc(peerName, rtc, dataChannels);
-		const hostRoomChannel = dataChannels["host-room"]!;
+		const hostRoomChannel = dataChannels['host-room']!;
 		this.hostRoomDataChannels[peerName] = hostRoomChannel;
 
 		hostRoomChannel.onmessage = (msg) => {

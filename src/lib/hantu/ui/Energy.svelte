@@ -1,13 +1,18 @@
 <script lang="ts">
-	import { getContext } from "svelte";
-	import { State, type GameState } from "../logic/game-state.svelte";
+	import { getContext } from 'svelte';
+	import { State, type GameState } from '../logic/game-state.svelte';
 
 	const gameState: GameState = getContext('gameState');
 </script>
 
 {#if gameState.state === State.Day || gameState.state === State.Night}
-	<progress value={gameState.thisPlayer.energy * 100} max="100" style:--color={`rgb(${100 - gameState.thisPlayer.energy * 100}% ${gameState.thisPlayer.energy * 100}% 0%)`}></progress>
+	<progress
+		value={gameState.thisPlayer.energy * 100}
+		max="100"
+		style:--color={`rgb(${100 - gameState.thisPlayer.energy * 100}% ${gameState.thisPlayer.energy * 100}% 0%)`}
+	></progress>
 {/if}
+
 <style>
 	progress {
 		position: fixed;
@@ -22,9 +27,11 @@
 		rotate: -90deg;
 	}
 	progress[value]::-webkit-progress-value {
-		background-image:
-			-webkit-linear-gradient(var(--color), var(--color));
+		background-image: -webkit-linear-gradient(var(--color), var(--color));
 
-		background-size: 35px 20px, 100% 100%, 100% 100%;
+		background-size:
+			35px 20px,
+			100% 100%,
+			100% 100%;
 	}
 </style>

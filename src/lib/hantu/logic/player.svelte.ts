@@ -4,12 +4,15 @@ import { AreaType } from '../levels/level.svelte';
 import { browser } from '$app/environment';
 
 const MAX_STUNNED_COUNT = 3;
+const HAUNT_INIT_DELAY = 3;
+const HAUNT_MAX_DURATION = 15;
 
 export class Player {
 	public readonly STUN_DURATION_SECS = 5;
 	public readonly STUN_ENERGY_RESET = 0.4;
 	public alive = $state(true);
 
+	protected _hauntInitializing = false;
 	protected _velocity: Vector2 = $state(new Vector2(0, 0));
 	protected _origin: Vector2 = $state(new Vector2(200, 260));
 
@@ -17,6 +20,8 @@ export class Player {
 	_possessed = false;
 	_isKeyHolder = false;
 	_stunned = $state(false);
+
+	private _haunting = $state(false);
 
 	public get currentVote() {
 		return this._currentVote;
@@ -50,11 +55,39 @@ export class Player {
 		return this._stunned;
 	}
 
+	public get haunting() {
+		return this._haunting;
+	}
+
+	public set haunting(value: boolean) {
+		if (this.haunting === value) {
+			return;
+		}
+		this._haunting = value;
+		if (this.haunting) {
+			this._hauntInitializing = true;
+			setTimeout(() => {
+				this._hauntInitializing = false;
+				if (!this.haunting) {
+					// Was cancelled
+					return;
+				}
+				setTimeout(() => {
+					this.haunting = false;
+				}, HAUNT_MAX_DURATION * 1000);
+			}, HAUNT_INIT_DELAY * 1000);
+		}
+	}
+
 	constructor(
 		public readonly name: string,
 		public readonly spriteUrl: string,
 		public readonly spriteHalfDimensions: Vector2
 	) {}
+
+	public get hauntInitializing() {
+		return this._hauntInitializing;
+	}
 
 	process(delta: number) {
 		this.origin = this.origin.add(this.velocity.mul(delta));
@@ -62,10 +95,11 @@ export class Player {
 }
 
 export class ThisPlayer extends Player {
-	public onEnterArea: (areaType: AreaType, areaId: number) => void = () => {};
-	public onExitArea: (areaType: AreaType, areaId: number) => void = () => {};
+	// public onEnterArea: (areaType: AreaType, areaId: number) => void = () => {};
+	// public onExitArea: (areaType: AreaType, areaId: number) => void = () => {};
 	public energy = $state(1);
 	public energyDrain = $state(0.022);
+	public haunted = $state(false);
 
 	private collisionMask?: ImageObj;
 	// 0 means no collision layer
@@ -95,6 +129,13 @@ export class ThisPlayer extends Player {
 			ImageObj.load(collisionMaskUrl).then((img) => {
 				this.collisionMask = img;
 			});
+			$effect(() => {
+				console.log("Running");
+				if (this.hauntInitializing) {
+					this.haunted = true;
+					this.forceExitLayer();
+				}
+			});
 		}
 	}
 
@@ -114,7 +155,6 @@ export class ThisPlayer extends Player {
 					this.energy = 1;
 					this._stunned = false;
 				}
-				
 			} else {
 				this.energy += (this.STUN_ENERGY_RESET / this.STUN_DURATION_SECS) * delta;
 				if (this.energy >= this.STUN_ENERGY_RESET) {
@@ -137,7 +177,8 @@ export class ThisPlayer extends Player {
 			}
 		}
 		const step = this.velocity.mul(delta);
-		if (this.collisionMask) {
+
+		if (!this.haunting && this.collisionMask) {
 			let stepAbs = step.abs();
 			const sign = step.sign();
 			const toCheck = Vector2.copy(this.origin);
@@ -189,17 +230,17 @@ export class ThisPlayer extends Player {
 			}
 
 			if (newLayer !== this.currentCollisionLayer) {
-				if (this.currentCollisionLayer !== 0) {
-					this.onExitArea(this._currentAreaType, this.currentCollisionLayer);
-				}
+				// if (this.currentCollisionLayer !== 0) {
+				// 	this.onExitArea(this._currentAreaType, this.currentCollisionLayer);
+				// }
 				this._currentAreaType = newAreaType;
 				this.currentCollisionLayer = newLayer;
-				if (newLayer !== 0) {
-					this.onEnterArea(this._currentAreaType, newLayer);
-				}
+				// if (newLayer !== 0) {
+				// 	this.onEnterArea(this._currentAreaType, newLayer);
+				// }
 			}
 			this.origin = toCheck;
-		} else {
+		} else if (!this.hauntInitializing) {
 			this.origin = this.origin.add(step);
 		}
 	}
