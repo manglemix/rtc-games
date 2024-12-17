@@ -1,13 +1,13 @@
 <script lang=ts>
 	import { getContext, onDestroy, onMount } from "svelte";
-	import type { GameState } from "../logic/game-state.svelte";
+	import type { AiAssistant } from "../logic/ai-assistant";
 
     let prompt = $state("");
     let response = $state("");
     let { visible = $bindable(false) }: { visible?: boolean } = $props();
 
-	const gameState: GameState = getContext('gameState');
-    gameState.onAIResponsePart = (part) => {
+	const aiAssistant: AiAssistant = getContext('aiAssistant');
+    aiAssistant.onAIResponsePart = (part) => {
         response += part ?? "";
     };
 
@@ -36,7 +36,7 @@
 <section>
     <form onsubmit={(e) => {
         e.preventDefault();
-        gameState.askAI(prompt);
+        aiAssistant.askAI(prompt);
     }}>
         <label for="prompt">Prompt</label>
         <input name="prompt" bind:value={prompt} />

@@ -1,5 +1,4 @@
 <script lang="ts">
-	import type { NetworkClient } from '$lib/rtc-client';
 	import { onDestroy, onMount, setContext } from 'svelte';
 	import { GameState, State } from './logic/game-state.svelte';
 	import FirstInfo from './ui/FirstInfo.svelte';
@@ -9,14 +8,18 @@
 	import { runBot } from './logic/bot.svelte';
 	import HostCommands from './logic/HostCommands.svelte';
 	import EndResults from './ui/EndResults.svelte';
+	import { AiAssistant } from './logic/ai-assistant';
+	import type { NetworkPeer } from '$lib/rtc';
 
 	let {
 		netClient,
 		roomCode,
 		bots
-	}: { netClient: NetworkClient; roomCode: string; bots?: NetworkClient[] } = $props();
+	}: { netClient: NetworkPeer; roomCode: string; bots?: NetworkPeer[] } = $props();
 	let gameState = GameState.create(netClient, roomCode, DEBUG_LEVEL);
+	let aiAssistant = AiAssistant.create(gameState, netClient);
 	setContext('gameState', gameState);
+	setContext('aiAssistant', aiAssistant);
 
 	onMount(() => {
 		document.documentElement.requestFullscreen();
